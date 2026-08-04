@@ -160,10 +160,22 @@
       atlasGlyphs[character]
     ) {
       var variants = atlasGlyphs[character].variants;
-      var variantSeed = (
-        seed ^ hash(character + "|" + index + "|" + text + "|" + lineIndex)
-      ) >>> 0;
-      var variantIndex = Math.floor(random01(variantSeed) * variants.length);
+      var variantIndex;
+      if (!isHan(character)) {
+        // Latin has an experimental alternate set. Re-rolling between the two
+        // whenever the input changes makes existing letters visibly jump.
+        variantIndex = variants.findIndex(function (variant) {
+          return variant.id === "latin-primary";
+        });
+        if (variantIndex < 0) {
+          variantIndex = 0;
+        }
+      } else {
+        var variantSeed = (
+          seed ^ hash(character + "|" + index + "|" + text + "|" + lineIndex)
+        ) >>> 0;
+        variantIndex = Math.floor(random01(variantSeed) * variants.length);
+      }
       return "atlas:" + character + "|" + variantIndex;
     }
     var lineHasHan = /[\u3400-\u9fff\uf900-\ufaff]/.test(text);

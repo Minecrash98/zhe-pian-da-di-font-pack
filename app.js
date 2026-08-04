@@ -4,7 +4,7 @@
   var defaults = {
     line1: "直到群友变成",
     line2: "一只小猪",
-    subtitle: "Till the group becomes a little pig",
+    subtitle: "Till We All Turn into Little Piggies",
     canvasSize: "1600x743",
     canvasRatioMode: "1600x743",
     backgroundMode: "checker",
@@ -146,7 +146,7 @@
     {
       line1: "直到群友变成",
       line2: "一只小猪",
-      subtitle: "Till the group becomes a little pig"
+      subtitle: "Till We All Turn into Little Piggies"
     },
     {
       line1: "一路向海",
@@ -2955,7 +2955,7 @@
       ),
       document.fonts.load(
         '400 90px "LogoScriptEN"',
-        "Till the group becomes a little pig"
+        "Till We All Turn into Little Piggies"
       ),
       document.fonts.load(
         '700 120px "LogoHandEN"',

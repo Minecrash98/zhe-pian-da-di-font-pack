@@ -151,12 +151,19 @@ summary:focus-visible {
   width: 42px;
   height: 42px;
   place-items: center;
+  overflow: hidden;
+  border: 1px solid rgba(243, 154, 62, 0.38);
   border-radius: 14px;
-  color: white;
-  background: var(--blue);
-  box-shadow: 0 8px 18px rgba(8, 107, 182, 0.23);
-  font-size: 25px;
+  background: rgba(255, 248, 233, 0.96);
+  box-shadow: 0 8px 18px rgba(112, 56, 21, 0.22);
   transform: rotate(-5deg);
+}
+
+.brand-mark img {
+  display: block;
+  width: 38px;
+  height: 38px;
+  transform: rotate(5deg);
 }
 
 .brand strong {
@@ -1694,7 +1701,11 @@ details[open] > .precision-summary .precision-chevron {
     width: 36px;
     height: 36px;
     border-radius: 11px;
-    font-size: 21px;
+  }
+
+  .brand-mark img {
+    width: 33px;
+    height: 33px;
   }
 
   .brand strong {

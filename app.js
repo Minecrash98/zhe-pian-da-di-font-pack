@@ -144,19 +144,24 @@
 
   var examples = [
     {
+      line1: "直到25块变成",
+      line2: "一个5块",
+      subtitle: "Till 25 Turns into 5"
+    },
+    {
       line1: "直到群友变成",
       line2: "一只小猪",
       subtitle: "Till We All Turn into Little Piggies"
     },
     {
-      line1: "一路向海",
-      line2: "自由生长",
-      subtitle: "Wherever we go, we glow"
+      line1: "直到所有盲盒",
+      line2: "变成单领",
+      subtitle: "Till Every Blind Box Becomes a Solo Pick"
     },
     {
-      line1: "STAY CURIOUS",
-      line2: "KEEP CREATING",
-      subtitle: "Dream loud · Make it real"
+      line1: "直到余量变成",
+      line2: "团长包尾",
+      subtitle: "Till the Group Leader Takes the Rest"
     }
   ];
 

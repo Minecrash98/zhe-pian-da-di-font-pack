@@ -1,0 +1,473 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="《明日方舟》2026 年夏日活动「直到大地变成一颗酸橙」主题二创文字生成器，帮你快速制作属于自己的活动风格文字图片。"
+    />
+    <meta property="og:title" content="直到大地变成一颗酸橙" />
+    <meta
+      property="og:description"
+      content="《明日方舟》2026 年夏日活动「直到大地变成一颗酸橙」主题二创文字生成器，帮你快速制作属于自己的活动风格文字图片。"
+    />
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
+    <title>直到大地变成一颗酸橙</title>
+    <link rel="icon" href="data:," />
+    <link
+      rel="preload"
+      href="./assets/arknights-summer-page-bg.webp"
+      as="image"
+      type="image/webp"
+      fetchpriority="high"
+    />
+    <link rel="stylesheet" href="./styles.css?v=11" />
+  </head>
+  <body>
+    <div class="app-shell">
+      <header class="topbar">
+        <a class="brand" href="#" aria-label="直到大地变成一颗酸橙首页">
+          <span class="brand-mark" aria-hidden="true">✦</span>
+          <span>
+            <strong>直到大地变成一颗酸橙</strong>
+          </span>
+        </a>
+      </header>
+
+      <main class="workspace">
+        <aside class="control-panel" aria-label="字标设置">
+          <section class="control-section first-section">
+            <div class="section-title">
+              <span class="step-number">01</span>
+              <h2>写下想说的话</h2>
+              <button class="icon-button" id="resetButton" type="button" title="恢复默认设置" aria-label="恢复默认设置">
+                ↺
+              </button>
+            </div>
+
+            <label class="field">
+              <span>第一行 <output id="line1Count">7</output></span>
+              <input id="line1" type="text" value="直到群友变成" autocomplete="off" />
+            </label>
+
+            <label class="field">
+              <span>第二行 <output id="line2Count">4</output></span>
+              <input id="line2" type="text" value="一只小猪" autocomplete="off" />
+            </label>
+
+            <label class="field">
+              <span>英文小字 <output id="subtitleCount">35</output></span>
+              <input
+                id="subtitle"
+                type="text"
+                value="Till the group becomes a little pig"
+                autocomplete="off"
+                spellcheck="false"
+              />
+            </label>
+
+            <div class="example-row" aria-label="示例文案">
+              <span>换个灵感</span>
+              <button type="button" class="text-button example-button" data-example="0">群聊</button>
+              <button type="button" class="text-button example-button" data-example="1">旅行</button>
+              <button type="button" class="text-button example-button" data-example="2">英文</button>
+            </div>
+          </section>
+
+          <section class="control-section">
+            <div class="section-title">
+              <span class="step-number">02</span>
+              <h2>调整画面</h2>
+            </div>
+
+            <div class="field canvas-ratio-field">
+              <span>画布比例</span>
+              <input id="canvasSize" type="hidden" value="1600x743" />
+              <div class="canvas-ratio-picker" id="canvasRatioPicker" role="radiogroup" aria-label="选择画布比例">
+                <button class="canvas-ratio-option active" type="button" data-canvas-mode="1600x743" role="radio" aria-checked="true" title="轻巧横幅 · 2.15:1">
+                  <span class="ratio-icon"><i class="ratio-shape ratio-banner"></i></span>
+                  <span>横幅</span>
+                </button>
+                <button class="canvas-ratio-option" type="button" data-canvas-mode="1600x900" role="radio" aria-checked="false" title="横版 · 16:9">
+                  <span class="ratio-icon"><i class="ratio-shape ratio-landscape"></i></span>
+                  <span>横版</span>
+                </button>
+                <button class="canvas-ratio-option" type="button" data-canvas-mode="1600x1100" role="radio" aria-checked="false" title="经典字标 · 16:11">
+                  <span class="ratio-icon"><i class="ratio-shape ratio-logo"></i></span>
+                  <span>字标</span>
+                </button>
+                <button class="canvas-ratio-option" type="button" data-canvas-mode="1600x1600" role="radio" aria-checked="false" title="方形 · 1:1">
+                  <span class="ratio-icon"><i class="ratio-shape ratio-square"></i></span>
+                  <span>方形</span>
+                </button>
+                <button class="canvas-ratio-option" type="button" data-canvas-mode="2000x1000" role="radio" aria-checked="false" title="超宽横幅 · 2:1">
+                  <span class="ratio-icon"><i class="ratio-shape ratio-ultrawide"></i></span>
+                  <span>超宽</span>
+                </button>
+                <button class="canvas-ratio-option" id="autoCanvasRatioButton" type="button" data-canvas-mode="auto" role="radio" aria-checked="false" title="跟随上传图片的比例" disabled>
+                  <span class="ratio-icon"><i class="ratio-shape ratio-auto" id="autoCanvasRatioShape">↔</i></span>
+                  <span>随图片</span>
+                </button>
+              </div>
+            </div>
+
+            <label class="range-field">
+              <span>
+                <span>星星装饰量</span>
+                <output id="densityValue">64%</output>
+              </span>
+              <input id="density" type="range" min="0" max="100" value="64" />
+            </label>
+
+            <label class="range-field">
+              <span>
+                <span>两行上下间距</span>
+                <output id="lineGapValue">110%</output>
+              </span>
+              <input id="lineGap" type="range" min="60" max="150" step="5" value="110" />
+            </label>
+
+            <label class="range-field">
+              <span>
+                <span>中英上下间距</span>
+                <output id="subtitleGapValue">100%</output>
+              </span>
+              <input
+                id="subtitleGap"
+                type="range"
+                min="50"
+                max="200"
+                step="5"
+                value="100"
+                aria-label="主标题与英文小字的上下间距"
+              />
+            </label>
+
+            <div class="toggle-row">
+              <label class="switch-label">
+                <input id="outline" type="checkbox" checked />
+                <span class="switch" aria-hidden="true"></span>
+                <span>柔光描边</span>
+              </label>
+              <button class="shuffle-button" id="shuffleButton" type="button">
+                <span aria-hidden="true">✦</span>
+                换一组星星
+              </button>
+            </div>
+
+            <details class="artwork-transform">
+              <summary class="precision-summary">
+                <span>文字精确微调</span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="precision-controls">
+                <div class="transform-heading">
+                  <strong>大小与位置</strong>
+                  <button id="resetArtworkButton" type="button">居中复位</button>
+                </div>
+
+                <label class="range-field compact-range">
+                  <span>
+                    <span>整体大小</span>
+                    <output id="artworkScaleValue">100%</output>
+                  </span>
+                  <input id="artworkScale" type="range" min="40" max="180" step="2" value="100" />
+                </label>
+
+                <div class="two-column artwork-position-grid">
+                  <label class="range-field compact-range">
+                    <span>
+                      <span>左右位置</span>
+                      <output id="artworkXValue">50%</output>
+                    </span>
+                    <input id="artworkX" type="range" min="0" max="100" value="50" />
+                  </label>
+                  <label class="range-field compact-range">
+                    <span>
+                      <span>上下位置</span>
+                      <output id="artworkYValue">50%</output>
+                    </span>
+                    <input id="artworkY" type="range" min="0" max="100" value="50" />
+                  </label>
+                </div>
+
+                <label class="range-field compact-range">
+                  <span>
+                    <span>旋转</span>
+                    <output id="artworkRotationValue">0°</output>
+                  </span>
+                  <input id="artworkRotation" type="range" min="-180" max="180" step="1" value="0" />
+                </label>
+              </div>
+            </details>
+          </section>
+
+          <section class="control-section color-section">
+            <div class="section-title">
+              <span class="step-number">03</span>
+              <h2>挑选颜色</h2>
+            </div>
+            <div class="color-grid">
+              <label class="color-control">
+                <input id="primaryColor" type="color" value="#0962b5" />
+                <span>
+                  <strong>主色</strong>
+                  <small id="primaryColorValue">#0962B5</small>
+                </span>
+              </label>
+              <label class="color-control">
+                <input id="accentColor" type="color" value="#fcc641" />
+                <span>
+                  <strong>点缀</strong>
+                  <small id="accentColorValue">#FCC641</small>
+                </span>
+              </label>
+              <label class="color-control">
+                <input id="skyColor" type="color" value="#44a5db" />
+                <span>
+                  <strong>辅色</strong>
+                  <small id="skyColorValue">#44A5DB</small>
+                </span>
+              </label>
+            </div>
+
+            <details class="precision-disclosure title-shadow-disclosure">
+              <summary class="precision-summary">
+                <span>标题阴影（高级）</span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="precision-controls">
+                <div class="toggle-row shadow-toggle-row">
+                  <label class="switch-label">
+                    <input id="titleShadowEnabled" type="checkbox" checked />
+                    <span class="switch" aria-hidden="true"></span>
+                    <span>启用阴影</span>
+                  </label>
+                  <span class="shadow-preset-note">轻阴影</span>
+                </div>
+
+                <fieldset class="shadow-controls" id="titleShadowControls">
+                  <label class="color-control shadow-color-control">
+                    <input id="titleShadowColor" type="color" value="#4b3020" />
+                    <span>
+                      <strong>阴影颜色</strong>
+                      <small id="titleShadowColorValue">#4B3020</small>
+                    </span>
+                  </label>
+
+                  <label class="range-field compact-range">
+                    <span>
+                      <span>不透明度</span>
+                      <output id="titleShadowOpacityValue">28%</output>
+                    </span>
+                    <input id="titleShadowOpacity" type="range" min="0" max="100" step="1" value="28" />
+                  </label>
+
+                  <label class="range-field compact-range">
+                    <span>
+                      <span>向下偏移</span>
+                      <output id="titleShadowOffsetYValue">3 px</output>
+                    </span>
+                    <input id="titleShadowOffsetY" type="range" min="-20" max="30" step="1" value="3" />
+                  </label>
+
+                  <label class="range-field compact-range">
+                    <span>
+                      <span>模糊</span>
+                      <output id="titleShadowBlurValue">5 px</output>
+                    </span>
+                    <input id="titleShadowBlur" type="range" min="0" max="30" step="1" value="5" />
+                  </label>
+                </fieldset>
+              </div>
+            </details>
+          </section>
+
+          <section class="control-section image-layer-section">
+            <div class="section-title">
+              <span class="step-number">04</span>
+              <h2>加入一张图片</h2>
+              <button
+                id="overlayLockButton"
+                class="layer-lock-button"
+                type="button"
+                aria-label="上传图片后可锁定"
+                aria-pressed="true"
+                title="上传图片后可锁定"
+                disabled
+              >
+                <span class="layer-lock-glyph" aria-hidden="true"></span>
+              </button>
+            </div>
+
+            <div class="overlay-upload-row">
+              <label class="upload-button" for="overlayFile">
+                <input
+                  id="overlayFile"
+                  type="file"
+                  accept="image/png,image/jpeg,image/webp"
+                />
+                <span aria-hidden="true">＋</span>
+                选择图片
+              </label>
+              <button id="removeOverlayButton" class="remove-layer-button" type="button" disabled>
+                移除
+              </button>
+            </div>
+
+            <div class="overlay-file-card" id="overlayFileCard" aria-live="polite">
+              <div class="overlay-thumbnail-wrap">
+                <img id="overlayThumbnail" alt="已添加图片的缩略图" hidden />
+                <span id="overlayPlaceholder" aria-hidden="true">◇</span>
+              </div>
+              <span>
+                <strong id="overlayFileName">还没有添加图片</strong>
+                <small id="overlayFileMeta">PNG、JPG 或 WebP · 25 MB 以内</small>
+              </span>
+            </div>
+
+            <details class="overlay-controls precision-disclosure" id="overlayControls" hidden>
+              <summary class="precision-summary">
+                <span>图片精确微调</span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="precision-controls">
+                <div class="two-column overlay-top-controls">
+                <label class="field">
+                  <span>图片位置</span>
+                  <select id="overlayLayer">
+                    <option value="foreground">盖在文字上方</option>
+                    <option value="background" selected>衬在文字下方</option>
+                  </select>
+                </label>
+                <button id="resetOverlayButton" class="layer-reset-button" type="button">
+                  回到中央
+                </button>
+                </div>
+
+                <label class="range-field compact-range">
+                <span><span>图片大小</span><output id="overlayScaleValue">100%</output></span>
+                <input id="overlayScale" type="range" min="5" max="200" value="100" />
+                </label>
+                <div class="two-column overlay-position-grid">
+                <label class="range-field compact-range">
+                  <span><span>水平位置</span><output id="overlayXValue">50%</output></span>
+                  <input id="overlayX" type="range" min="0" max="100" value="50" />
+                </label>
+                <label class="range-field compact-range">
+                  <span><span>垂直位置</span><output id="overlayYValue">50%</output></span>
+                  <input id="overlayY" type="range" min="0" max="100" value="50" />
+                </label>
+                </div>
+                <div class="two-column overlay-position-grid">
+                <label class="range-field compact-range">
+                  <span><span>旋转</span><output id="overlayRotationValue">0°</output></span>
+                  <input id="overlayRotation" type="range" min="-180" max="180" value="0" />
+                </label>
+                <label class="range-field compact-range">
+                  <span><span>透明度</span><output id="overlayOpacityValue">100%</output></span>
+                  <input id="overlayOpacity" type="range" min="0" max="100" value="100" />
+                </label>
+                </div>
+              </div>
+            </details>
+
+            <p class="overlay-hint">解锁后可在画布中移动、缩放和旋转。</p>
+          </section>
+
+        </aside>
+
+        <section class="preview-panel" aria-label="透明字标预览">
+          <div class="preview-toolbar">
+            <div class="preview-heading">
+              <div class="preview-heading-copy">
+                <p class="eyebrow">YOUR CREATION</p>
+                <h2>看看成品</h2>
+              </div>
+              <div class="canvas-object-tools" aria-label="画布内调整">
+                <span>编辑</span>
+                <div class="drag-target-switch" role="group" aria-label="选择调整对象">
+                  <button id="dragArtworkButton" class="active" type="button" aria-pressed="true">文字</button>
+                  <button id="dragOverlayButton" type="button" aria-pressed="false" disabled>图片</button>
+                </div>
+                <button class="canvas-reset-button" id="canvasResetButton" type="button" title="将当前对象居中复位" aria-label="将当前对象居中复位">↺</button>
+              </div>
+            </div>
+            <div class="background-switcher" role="group" aria-label="画布背景">
+              <button type="button" class="background-button active" data-background="checker" aria-pressed="true">
+                <span class="checker-swatch" aria-hidden="true"></span>
+                <span class="background-label">透明</span>
+              </button>
+              <button type="button" class="background-button" data-background="light" aria-pressed="false">
+                <span class="light-swatch" aria-hidden="true"></span>
+                <span class="background-label">浅色</span>
+              </button>
+              <button type="button" class="background-button" data-background="dark" aria-pressed="false">
+                <span class="dark-swatch" aria-hidden="true"></span>
+                <span class="background-label">深色</span>
+              </button>
+            </div>
+          </div>
+
+          <div class="canvas-stage" id="canvasStage">
+            <div class="canvas-frame checker" id="canvasFrame">
+              <canvas
+                id="logoCanvas"
+                width="1600"
+                height="743"
+                role="img"
+                aria-label="当前字标作品"
+              ></canvas>
+              <div class="canvas-selection" id="canvasSelection" role="group" aria-label="当前调整对象" hidden>
+                <span class="canvas-selection-label" id="canvasSelectionLabel">文字</span>
+                <span class="rotation-stem" aria-hidden="true"></span>
+                <button class="canvas-handle rotation-handle" id="canvasRotationHandle" type="button" aria-label="拖动旋转当前对象">↻</button>
+                <button class="canvas-handle scale-handle" id="canvasScaleHandle" type="button" aria-label="拖动缩放当前对象">↘</button>
+              </div>
+              <div class="canvas-corner-label" id="canvasCornerLabel">1600 × 743</div>
+            </div>
+          </div>
+
+          <div class="preview-caption">
+            <span><i class="canvas-edit-icon" aria-hidden="true">✦</i> 拖动移动 · 右上旋转 · 右下缩放</span>
+            <span id="renderStatus" role="status" aria-live="polite">画面已准备好</span>
+          </div>
+
+          <div class="export-bar">
+            <div class="export-copy">
+              <span class="export-icon" aria-hidden="true">↧</span>
+              <span>
+                <strong>保存作品</strong>
+                <small id="exportDescription">3200 × 1486 px</small>
+              </span>
+            </div>
+            <label class="scale-select">
+              <span>清晰度</span>
+              <select id="exportScale">
+                <option value="1">标准 · 1×</option>
+                <option value="2" selected>高清 · 2×</option>
+                <option value="3">超清 · 3×</option>
+              </select>
+            </label>
+            <button class="download-button" id="downloadButton" type="button">
+              <span aria-hidden="true">↓</span>
+              保存图片
+            </button>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <div class="toast" id="toast" role="status" aria-live="polite">
+      <span aria-hidden="true">✓</span>
+      <span id="toastText">作品已准备好</span>
+    </div>
+
+    <script src="./assets/vendor/opentype.min.js"></script>
+    <script src="./templates.js?v=3"></script>
+    <script src="./style-engine.js?v=2"></script>
+    <script src="./app.js?v=16"></script>
+  </body>
+</html>

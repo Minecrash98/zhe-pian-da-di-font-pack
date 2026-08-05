@@ -23,7 +23,7 @@
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="./styles.css?v=13" />
+    <link rel="stylesheet" href="./styles.css?v=14" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -57,6 +57,17 @@
             <strong>直到大地变成一颗酸橙</strong>
           </span>
         </a>
+        <div class="topbar-actions">
+          <button
+            class="cache-refresh-button"
+            id="cacheRefreshButton"
+            type="button"
+            title="重新获取网站字体与资源，不会删除你的本地图片"
+          >
+            <span class="cache-refresh-icon" aria-hidden="true">↻</span>
+            <span id="cacheRefreshLabel">刷新缓存</span>
+          </button>
+        </div>
       </header>
 
       <main class="workspace">
@@ -483,6 +494,87 @@
           </div>
         </section>
       </main>
+
+      <footer class="site-footer">
+        <a
+          class="github-link"
+          href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
+          target="_blank"
+          rel="noopener noreferrer"
+          aria-label="在 GitHub 查看这片大地字体包源码（新窗口打开）"
+        >
+          <span class="github-badge" aria-hidden="true">GH</span>
+          <span>在 GitHub 查看源码</span>
+          <span class="github-arrow" aria-hidden="true">↗</span>
+        </a>
+      </footer>
+    </div>
+
+    <div class="save-assist" id="saveAssist" hidden>
+      <button
+        class="save-assist-backdrop"
+        id="saveAssistBackdrop"
+        type="button"
+        aria-label="关闭手机保存助手"
+      ></button>
+      <section
+        class="save-assist-card"
+        id="saveAssistCard"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="saveAssistTitle"
+        aria-describedby="saveAssistDescription"
+      >
+        <button
+          class="save-assist-close"
+          id="saveAssistCloseButton"
+          type="button"
+          aria-label="关闭手机保存助手"
+        >
+          ×
+        </button>
+        <div class="save-assist-emblem" aria-hidden="true">↓</div>
+        <p class="save-assist-eyebrow">MOBILE SAVE</p>
+        <h2 id="saveAssistTitle">图片已经准备好</h2>
+        <p id="saveAssistDescription">
+          这个浏览器可能不会自动保存文件，请选择一种可靠的保存方式。
+        </p>
+        <div class="save-assist-actions">
+          <button
+            class="save-assist-primary"
+            id="systemSaveButton"
+            type="button"
+            hidden
+          >
+            <span aria-hidden="true">↥</span>
+            调用系统保存 / 分享
+          </button>
+          <button
+            class="save-assist-secondary"
+            id="openSavedImageButton"
+            type="button"
+          >
+            <span aria-hidden="true">▣</span>
+            打开原图后长按保存
+          </button>
+        </div>
+        <small>不会清除或上传你添加到画布中的本地图片。</small>
+      </section>
+
+      <section
+        class="save-image-preview"
+        id="saveImagePreview"
+        role="dialog"
+        aria-modal="true"
+        aria-label="高清原图保存预览"
+        hidden
+      >
+        <div class="save-image-preview-toolbar">
+          <span><i aria-hidden="true">✦</i> 长按下方原图，选择保存到相册</span>
+          <button id="closeSavedImageButton" type="button">完成</button>
+        </div>
+        <img id="savedImagePreview" alt="刚刚生成的高清字标作品" />
+      </section>
     </div>
 
     <div class="toast" id="toast" role="status" aria-live="polite">
@@ -492,7 +584,7 @@
 
     <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
-    <script src="./style-engine.js?v=4"></script>
-    <script src="./app.js?v=19"></script>
+    <script src="./style-engine.js?v=5"></script>
+    <script src="./app.js?v=20"></script>
   </body>
 </html>

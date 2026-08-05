@@ -6,6 +6,28 @@
   var atlasImages = Object.create(null);
   var atlasLoading = Object.create(null);
   var tintCache = Object.create(null);
+  var cacheRefreshToken = "";
+
+  try {
+    cacheRefreshToken = new URLSearchParams(global.location.search).get(
+      "cache-refresh"
+    ) || "";
+  } catch (error) {
+    cacheRefreshToken = "";
+  }
+
+  function freshResourceUrl(url) {
+    if (!cacheRefreshToken) {
+      return url;
+    }
+    try {
+      var freshUrl = new URL(url, global.document.baseURI);
+      freshUrl.searchParams.set("cache-refresh", cacheRefreshToken);
+      return freshUrl.href;
+    } catch (error) {
+      return url;
+    }
+  }
   var skeletonCache = Object.create(null);
   var ready = false;
   var readyPromise = null;
@@ -76,7 +98,10 @@
   }
 
   function loadArrayBuffer(url, errorPrefix, onProgress) {
-    return fetch(url).then(function (response) {
+    return fetch(
+      freshResourceUrl(url),
+      cacheRefreshToken ? { cache: "reload" } : undefined
+    ).then(function (response) {
       if (!response.ok) {
         throw new Error(errorPrefix + url);
       }
@@ -705,7 +730,7 @@
         console.warn("Unable to load atlas glyph:", key);
         resolve(null);
       };
-      image.src = key;
+      image.src = freshResourceUrl(key);
     });
     return null;
   }

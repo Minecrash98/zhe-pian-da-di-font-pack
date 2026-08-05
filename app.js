@@ -58,6 +58,12 @@
   var fontLoadingPercent = 0;
   var fontLoadingHideTimer = 0;
   var initialFontLoadingError = null;
+  var cacheRefreshInProgress = false;
+  var pendingSaveFile = null;
+  var pendingSaveFilename = "";
+  var pendingSaveObjectUrl = "";
+  var pendingSaveDimensions = "";
+  var saveAssistReturnFocus = null;
 
   var elements = {
     canvas: document.getElementById("logoCanvas"),
@@ -139,8 +145,19 @@
     exportDescription: document.getElementById("exportDescription"),
     renderStatus: document.getElementById("renderStatus"),
     downloadButton: document.getElementById("downloadButton"),
+    cacheRefreshButton: document.getElementById("cacheRefreshButton"),
+    cacheRefreshLabel: document.getElementById("cacheRefreshLabel"),
     resetButton: document.getElementById("resetButton"),
     shuffleButton: document.getElementById("shuffleButton"),
+    saveAssist: document.getElementById("saveAssist"),
+    saveAssistCard: document.getElementById("saveAssistCard"),
+    saveAssistBackdrop: document.getElementById("saveAssistBackdrop"),
+    saveAssistCloseButton: document.getElementById("saveAssistCloseButton"),
+    systemSaveButton: document.getElementById("systemSaveButton"),
+    openSavedImageButton: document.getElementById("openSavedImageButton"),
+    saveImagePreview: document.getElementById("saveImagePreview"),
+    savedImagePreview: document.getElementById("savedImagePreview"),
+    closeSavedImageButton: document.getElementById("closeSavedImageButton"),
     toast: document.getElementById("toast"),
     toastText: document.getElementById("toastText"),
     fontLoadingPopover: document.getElementById("fontLoadingPopover"),
@@ -2736,11 +2753,333 @@
       .slice(0, 32);
   }
 
+  function setCacheRefreshLoading(loading) {
+    cacheRefreshInProgress = loading;
+    if (!elements.cacheRefreshButton) {
+      return;
+    }
+    elements.cacheRefreshButton.disabled = loading;
+    elements.cacheRefreshButton.classList.toggle("loading", loading);
+    if (loading) {
+      elements.cacheRefreshButton.setAttribute("aria-busy", "true");
+    } else {
+      elements.cacheRefreshButton.removeAttribute("aria-busy");
+    }
+    elements.cacheRefreshLabel.textContent = loading ? "刷新中…" : "刷新缓存";
+  }
+
+  function cacheRefreshUrls() {
+    var urls = [
+      "./assets/font-atlas/runtime-glyph-index.json?v=3",
+      "./assets/fonts/LongCang-Regular.ttf",
+      "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
+      "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
+      "./assets/fonts/Kalam-Bold.ttf",
+      "./assets/fonts/PrincessSofia-Regular.ttf",
+      "./assets/arknights-summer-page-bg.webp"
+    ];
+
+    Array.prototype.forEach.call(
+      document.querySelectorAll("link[href], script[src], img[src]"),
+      function (node) {
+        urls.push(node.href || node.src);
+      }
+    );
+
+    var seen = Object.create(null);
+    return urls.reduce(function (result, url) {
+      try {
+        var absoluteUrl = new URL(url, document.baseURI);
+        if (
+          absoluteUrl.origin !== window.location.origin ||
+          seen[absoluteUrl.href]
+        ) {
+          return result;
+        }
+        seen[absoluteUrl.href] = true;
+        result.push(absoluteUrl.href);
+      } catch (error) {
+        // An invalid optional resource should not prevent the cache refresh.
+      }
+      return result;
+    }, []);
+  }
+
+  function refreshSiteCache() {
+    if (cacheRefreshInProgress) {
+      return;
+    }
+    setCacheRefreshLoading(true);
+    showToast("正在重新获取字体与网站资源");
+
+    var cleanupTasks = [];
+    if (window.caches && window.caches.keys) {
+      cleanupTasks.push(
+        window.caches
+          .keys()
+          .then(function (keys) {
+            return Promise.all(
+              keys.map(function (key) {
+                return window.caches.delete(key);
+              })
+            );
+          })
+          .catch(function (error) {
+            console.warn("Unable to clear Cache Storage.", error);
+          })
+      );
+    }
+    if (
+      navigator.serviceWorker &&
+      navigator.serviceWorker.getRegistrations
+    ) {
+      cleanupTasks.push(
+        navigator.serviceWorker
+          .getRegistrations()
+          .then(function (registrations) {
+            return Promise.all(
+              registrations.map(function (registration) {
+                return registration.unregister();
+              })
+            );
+          })
+          .catch(function (error) {
+            console.warn("Unable to unregister service workers.", error);
+          })
+      );
+    }
+
+    Promise.all(cleanupTasks)
+      .then(function () {
+        return Promise.all(
+          cacheRefreshUrls().map(function (url) {
+            return fetch(url, {
+              cache: "reload",
+              credentials: "same-origin"
+            }).then(function (response) {
+              if (!response.ok) {
+                throw new Error("Unable to refresh resource: " + url);
+              }
+              return response.arrayBuffer().then(function () {
+                return undefined;
+              });
+            });
+          })
+        );
+      })
+      .then(function () {
+        elements.cacheRefreshLabel.textContent = "正在重载…";
+        showToast("缓存已刷新，正在重新加载");
+        var nextUrl = new URL(window.location.href);
+        nextUrl.searchParams.set("cache-refresh", String(Date.now()));
+        window.setTimeout(function () {
+          window.location.replace(nextUrl.href);
+        }, 180);
+      })
+      .catch(function (error) {
+        console.warn("Unable to refresh site resources.", error);
+        setCacheRefreshLoading(false);
+        showToast("刷新失败，请检查网络后重试");
+      });
+  }
+
+  function setDownloadLoading(loading) {
+    elements.downloadButton.disabled = loading;
+    elements.downloadButton.classList.toggle("loading", loading);
+    if (loading) {
+      elements.downloadButton.setAttribute("aria-busy", "true");
+    } else {
+      elements.downloadButton.removeAttribute("aria-busy");
+    }
+  }
+
+  function isMobileSaveBrowser() {
+    var userAgent = navigator.userAgent || "";
+    var iPadOs =
+      navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
+    var userAgentDataMobile = Boolean(
+      navigator.userAgentData && navigator.userAgentData.mobile
+    );
+    return (
+      userAgentDataMobile ||
+      iPadOs ||
+      /Android|webOS|iPhone|iPad|iPod|BlackBerry|IEMobile|Opera Mini|Mobile/i.test(
+        userAgent
+      )
+    );
+  }
+
+  function createArtworkFile(blob, filename) {
+    if (typeof File !== "function") {
+      return null;
+    }
+    try {
+      return new File([blob], filename, {
+        type: "image/png",
+        lastModified: Date.now()
+      });
+    } catch (error) {
+      return null;
+    }
+  }
+
+  function canShareArtworkFile(file) {
+    if (!file || !navigator.share || !navigator.canShare) {
+      return false;
+    }
+    try {
+      return navigator.canShare({ files: [file] });
+    } catch (error) {
+      return false;
+    }
+  }
+
+  function releasePendingSave(revokeDelay) {
+    var objectUrl = pendingSaveObjectUrl;
+    pendingSaveFile = null;
+    pendingSaveFilename = "";
+    pendingSaveObjectUrl = "";
+    pendingSaveDimensions = "";
+    if (objectUrl) {
+      window.setTimeout(function () {
+        URL.revokeObjectURL(objectUrl);
+      }, revokeDelay || 0);
+    }
+  }
+
+  function closeSaveAssist() {
+    if (!elements.saveAssist || elements.saveAssist.hidden) {
+      return;
+    }
+    elements.saveAssist.hidden = true;
+    elements.saveAssistCard.hidden = false;
+    elements.saveImagePreview.hidden = true;
+    elements.savedImagePreview.removeAttribute("src");
+    elements.systemSaveButton.disabled = false;
+    releasePendingSave(120000);
+    if (saveAssistReturnFocus && saveAssistReturnFocus.focus) {
+      saveAssistReturnFocus.focus();
+    }
+    saveAssistReturnFocus = null;
+  }
+
+  function showSaveAssist(blob, filename, dimensions) {
+    if (pendingSaveObjectUrl) {
+      releasePendingSave(120000);
+    }
+    pendingSaveFilename = filename;
+    pendingSaveFile = createArtworkFile(blob, filename);
+    pendingSaveObjectUrl = URL.createObjectURL(blob);
+    pendingSaveDimensions = dimensions;
+    saveAssistReturnFocus = document.activeElement;
+    elements.saveAssistCard.hidden = false;
+    elements.saveImagePreview.hidden = true;
+    elements.savedImagePreview.removeAttribute("src");
+    elements.systemSaveButton.hidden = !canShareArtworkFile(pendingSaveFile);
+    elements.systemSaveButton.disabled = false;
+    elements.saveAssist.hidden = false;
+    window.requestAnimationFrame(function () {
+      var firstAction = elements.systemSaveButton.hidden
+        ? elements.openSavedImageButton
+        : elements.systemSaveButton;
+      firstAction.focus();
+    });
+  }
+
+  function sharePendingArtwork() {
+    var file = pendingSaveFile;
+    var dimensions = pendingSaveDimensions;
+    if (!canShareArtworkFile(file)) {
+      elements.systemSaveButton.hidden = true;
+      showToast("系统保存不可用，请打开原图保存");
+      return;
+    }
+    elements.systemSaveButton.disabled = true;
+    elements.systemSaveButton.setAttribute("aria-busy", "true");
+    var sharePromise;
+    try {
+      sharePromise = navigator.share({
+        files: [file],
+        title: pendingSaveFilename
+      });
+    } catch (error) {
+      console.warn("Unable to share artwork file.", error);
+      elements.systemSaveButton.disabled = false;
+      elements.systemSaveButton.removeAttribute("aria-busy");
+      elements.systemSaveButton.hidden = true;
+      showToast("系统保存不可用，请打开原图保存");
+      return;
+    }
+    Promise.resolve(sharePromise)
+      .then(function () {
+        elements.systemSaveButton.disabled = false;
+        elements.systemSaveButton.removeAttribute("aria-busy");
+        closeSaveAssist();
+        elements.renderStatus.textContent =
+          "已交给系统保存 · " + dimensions;
+        showToast("已打开系统保存 / 分享");
+      })
+      .catch(function (error) {
+        elements.systemSaveButton.disabled = false;
+        elements.systemSaveButton.removeAttribute("aria-busy");
+        if (error && error.name === "AbortError") {
+          return;
+        }
+        console.warn("Unable to share artwork file.", error);
+        elements.systemSaveButton.hidden = true;
+        showToast("系统保存不可用，请打开原图保存");
+      });
+  }
+
+  function openPendingArtwork() {
+    if (!pendingSaveObjectUrl) {
+      showToast("原图已失效，请重新生成");
+      closeSaveAssist();
+      return;
+    }
+    elements.savedImagePreview.src = pendingSaveObjectUrl;
+    elements.saveAssistCard.hidden = true;
+    elements.saveImagePreview.hidden = false;
+    elements.renderStatus.textContent =
+      "请长按原图保存 · " + pendingSaveDimensions;
+    elements.closeSavedImageButton.focus();
+    showToast("长按原图即可保存到相册");
+  }
+
+  function startDirectDownload(blob, filename) {
+    var objectUrl = URL.createObjectURL(blob);
+    var link = document.createElement("a");
+    link.href = objectUrl;
+    link.download = filename;
+    link.style.display = "none";
+    document.body.appendChild(link);
+    link.click();
+    link.remove();
+    window.setTimeout(function () {
+      URL.revokeObjectURL(objectUrl);
+    }, 120000);
+  }
+
+  function deliverArtwork(blob, filename, dimensions) {
+    if (isMobileSaveBrowser()) {
+      showSaveAssist(blob, filename, dimensions);
+      elements.renderStatus.textContent = "图片已生成 · " + dimensions;
+      showToast("请选择一种保存方式");
+    } else {
+      startDirectDownload(blob, filename);
+      elements.renderStatus.textContent = "下载已开始 · " + dimensions;
+      showToast("下载已开始，请查看下载列表");
+    }
+    setDownloadLoading(false);
+  }
+
   function downloadArtwork() {
+    if (elements.downloadButton.classList.contains("loading")) {
+      return;
+    }
     readStateFromControls();
     updateInterface();
-    elements.downloadButton.classList.add("loading");
-    elements.downloadButton.setAttribute("aria-busy", "true");
+    setDownloadLoading(true);
     elements.renderStatus.textContent = "正在准备高清作品…";
 
     var begin = function () {
@@ -2750,39 +3089,31 @@
         exportCanvas.toBlob(
           function (blob) {
             if (!blob) {
-              elements.downloadButton.classList.remove("loading");
-              elements.downloadButton.removeAttribute("aria-busy");
+              setDownloadLoading(false);
               elements.renderStatus.textContent = "保存失败，请降低清晰度重试";
               showToast("保存失败，请重试");
               return;
             }
-
-            var url = URL.createObjectURL(blob);
-            var link = document.createElement("a");
-            link.href = url;
-            link.download = safeFilename(state.line1 || state.line2) + "-字标.png";
-            document.body.appendChild(link);
-            link.click();
-            link.remove();
-            window.setTimeout(function () {
-              URL.revokeObjectURL(url);
-            }, 1000);
-
-            elements.downloadButton.classList.remove("loading");
-            elements.downloadButton.removeAttribute("aria-busy");
-            elements.renderStatus.textContent =
-              "作品已保存 · " +
-              result.width * state.exportScale +
-              " × " +
-              result.height * state.exportScale;
-            showToast("作品已保存");
+            try {
+              var filename =
+                safeFilename(state.line1 || state.line2) + "-字标.png";
+              var dimensions =
+                result.width * state.exportScale +
+                " × " +
+                result.height * state.exportScale;
+              deliverArtwork(blob, filename, dimensions);
+            } catch (error) {
+              console.warn("Unable to prepare artwork download.", error);
+              setDownloadLoading(false);
+              elements.renderStatus.textContent = "保存失败，请重试";
+              showToast("保存失败，请重试");
+            }
           },
           "image/png",
           1
         );
       } catch (error) {
-        elements.downloadButton.classList.remove("loading");
-        elements.downloadButton.removeAttribute("aria-busy");
+        setDownloadLoading(false);
         elements.renderStatus.textContent = "尺寸太大，请降低清晰度重试";
         showToast("尺寸太大，请选择较低清晰度");
       }
@@ -2802,9 +3133,15 @@
           }
           return undefined;
         })
-        .then(begin);
+        .then(begin, function (error) {
+          console.warn("Artwork resources were not fully ready.", error);
+          begin();
+        });
     } else if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(begin);
+      document.fonts.ready.then(begin, function (error) {
+        console.warn("Artwork fonts were not fully ready.", error);
+        begin();
+      });
     } else {
       begin();
     }
@@ -3014,6 +3351,25 @@
   );
 
   elements.downloadButton.addEventListener("click", downloadArtwork);
+  elements.cacheRefreshButton.addEventListener("click", refreshSiteCache);
+  elements.saveAssistBackdrop.addEventListener("click", closeSaveAssist);
+  elements.saveAssistCloseButton.addEventListener("click", closeSaveAssist);
+  elements.closeSavedImageButton.addEventListener("click", closeSaveAssist);
+  elements.systemSaveButton.addEventListener("click", sharePendingArtwork);
+  elements.openSavedImageButton.addEventListener(
+    "click",
+    openPendingArtwork
+  );
+
+  document.addEventListener("keydown", function (event) {
+    if (
+      event.key === "Escape" &&
+      elements.saveAssist &&
+      !elements.saveAssist.hidden
+    ) {
+      closeSaveAssist();
+    }
+  });
 
   function refreshCanvasGeometry() {
     fitCanvasFrame(dimensionsFromValue(state.canvasSize));
@@ -3034,7 +3390,14 @@
     { passive: true }
   );
   window.addEventListener("pageshow", function () {
+    setCacheRefreshLoading(false);
     anchorFixedViewportAfterLayout(true);
+  });
+  window.addEventListener("pagehide", function () {
+    if (pendingSaveObjectUrl) {
+      elements.savedImagePreview.removeAttribute("src");
+      releasePendingSave(0);
+    }
   });
 
   window.addEventListener("lettering-atlas-glyph-ready", scheduleRender);

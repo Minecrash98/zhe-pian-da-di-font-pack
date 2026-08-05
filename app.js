@@ -2927,7 +2927,7 @@
         kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
         kalam: "./assets/fonts/Kalam-Bold.ttf",
         princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-      }, "./assets/font-atlas/runtime-glyph-index.json?v=2")
+      }, "./assets/font-atlas/runtime-glyph-index.json?v=3")
       .then(function () {
         scheduleRender();
       })

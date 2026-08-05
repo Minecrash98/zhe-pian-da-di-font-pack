@@ -146,6 +146,9 @@
     renderStatus: document.getElementById("renderStatus"),
     downloadButton: document.getElementById("downloadButton"),
     cacheRefreshButton: document.getElementById("cacheRefreshButton"),
+    mobileCacheRefreshButton: document.getElementById(
+      "mobileCacheRefreshButton"
+    ),
     cacheRefreshLabel: document.getElementById("cacheRefreshLabel"),
     resetButton: document.getElementById("resetButton"),
     shuffleButton: document.getElementById("shuffleButton"),
@@ -2334,9 +2337,13 @@
             ? 0.73
             : 0.67);
       var lineMidpoint = (firstLineY + secondLineY) / 2;
+      var naturalLineGap = secondLineY - firstLineY;
+      // Tall imported canvases should add whitespace around the lettering,
+      // not stretch the two title lines away from each other.
+      var responsiveLineGap = Math.min(naturalLineGap, width * 0.18);
       var scaledHalfGap =
-        ((secondLineY - firstLineY) / 2) *
-        clamp(state.lineGap / 100, 0.6, 1.5);
+        (responsiveLineGap / 2) *
+        clamp(state.lineGap / 100, 0.2, 1.5);
       firstLineY = lineMidpoint - scaledHalfGap;
       secondLineY = lineMidpoint + scaledHalfGap;
 
@@ -2417,19 +2424,24 @@
         var titleBottom = titleLines.reduce(function (lowest, line) {
           return Math.max(lowest, line.bottom);
         }, 0);
-        var baseSubtitleGap = height * (referenceRatio ? 0.022 : 0.075);
-        var subtitleGapScale = clamp(state.subtitleGap / 100, 0.5, 2);
-        var titleShift = (-baseSubtitleGap * (subtitleGapScale - 1)) / 2;
+        var subtitleGapUnit = Math.min(width, height);
+        // Base subtitle spacing on the short edge so changing canvas ratio
+        // does not silently make the gap much larger.
+        var subtitleGapScale = clamp(state.subtitleGap / 100, 0, 2);
+        var minimumSubtitleGap = -subtitleGapUnit * 0.03;
+        var subtitleGapStep = subtitleGapUnit * 0.04;
+        var effectiveSubtitleGap =
+          minimumSubtitleGap + subtitleGapStep * subtitleGapScale;
+        var defaultSubtitleGap = minimumSubtitleGap + subtitleGapStep;
+        var titleShift =
+          -(effectiveSubtitleGap - defaultSubtitleGap) / 2;
         titleLines.forEach(function (line) {
           line.y += titleShift;
           line.top += titleShift;
           line.bottom += titleShift;
         });
         var subtitleTop =
-          titleBottom +
-          titleShift -
-          height * (referenceRatio ? 0.03 : 0.025) +
-          baseSubtitleGap * subtitleGapScale;
+          titleBottom + titleShift + effectiveSubtitleGap;
         subtitle.y = subtitleTop + subtitle.fontSize * 1.05;
       } else {
         subtitle.y = height * 0.56;
@@ -2755,17 +2767,25 @@
 
   function setCacheRefreshLoading(loading) {
     cacheRefreshInProgress = loading;
-    if (!elements.cacheRefreshButton) {
-      return;
+    [elements.cacheRefreshButton, elements.mobileCacheRefreshButton].forEach(
+      function (button) {
+        if (!button) {
+          return;
+        }
+        button.disabled = loading;
+        button.classList.toggle("loading", loading);
+        if (loading) {
+          button.setAttribute("aria-busy", "true");
+        } else {
+          button.removeAttribute("aria-busy");
+        }
+      }
+    );
+    if (elements.cacheRefreshLabel) {
+      elements.cacheRefreshLabel.textContent = loading
+        ? "刷新中…"
+        : "刷新缓存";
     }
-    elements.cacheRefreshButton.disabled = loading;
-    elements.cacheRefreshButton.classList.toggle("loading", loading);
-    if (loading) {
-      elements.cacheRefreshButton.setAttribute("aria-busy", "true");
-    } else {
-      elements.cacheRefreshButton.removeAttribute("aria-busy");
-    }
-    elements.cacheRefreshLabel.textContent = loading ? "刷新中…" : "刷新缓存";
   }
 
   function cacheRefreshUrls() {
@@ -3352,6 +3372,12 @@
 
   elements.downloadButton.addEventListener("click", downloadArtwork);
   elements.cacheRefreshButton.addEventListener("click", refreshSiteCache);
+  if (elements.mobileCacheRefreshButton) {
+    elements.mobileCacheRefreshButton.addEventListener(
+      "click",
+      refreshSiteCache
+    );
+  }
   elements.saveAssistBackdrop.addEventListener("click", closeSaveAssist);
   elements.saveAssistCloseButton.addEventListener("click", closeSaveAssist);
   elements.closeSavedImageButton.addEventListener("click", closeSaveAssist);

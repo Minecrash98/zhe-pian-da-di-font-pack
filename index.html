@@ -23,7 +23,7 @@
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="./styles.css?v=14" />
+    <link rel="stylesheet" href="./styles.css?v=15" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -161,7 +161,7 @@
                 <span>两行上下间距</span>
                 <output id="lineGapValue">110%</output>
               </span>
-              <input id="lineGap" type="range" min="60" max="150" step="5" value="110" />
+              <input id="lineGap" type="range" min="20" max="150" step="5" value="110" />
             </label>
 
             <label class="range-field">
@@ -172,7 +172,7 @@
               <input
                 id="subtitleGap"
                 type="range"
-                min="50"
+                min="0"
                 max="200"
                 step="5"
                 value="100"
@@ -417,6 +417,19 @@
         <section class="preview-panel" aria-label="透明字标预览">
           <div class="preview-toolbar">
             <div class="preview-heading">
+              <div class="mobile-preview-brand" aria-label="酸橙字标生成器">
+                <img src="./assets/orange-icon.svg?v=1" alt="" />
+                <strong>酸橙字标</strong>
+                <button
+                  class="mobile-cache-refresh-button"
+                  id="mobileCacheRefreshButton"
+                  type="button"
+                  title="重新获取网站字体与资源"
+                  aria-label="重新获取网站字体与资源"
+                >
+                  <span class="cache-refresh-icon" aria-hidden="true">↻</span>
+                </button>
+              </div>
               <div class="preview-heading-copy">
                 <p class="eyebrow">YOUR CREATION</p>
                 <h2>看看成品</h2>
@@ -481,7 +494,7 @@
             </div>
             <label class="scale-select">
               <span>清晰度</span>
-              <select id="exportScale">
+              <select id="exportScale" aria-label="导出清晰度">
                 <option value="1">标准 · 1×</option>
                 <option value="2" selected>高清 · 2×</option>
                 <option value="3">超清 · 3×</option>
@@ -585,6 +598,6 @@
     <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
-    <script src="./app.js?v=20"></script>
+    <script src="./app.js?v=21"></script>
   </body>
 </html>

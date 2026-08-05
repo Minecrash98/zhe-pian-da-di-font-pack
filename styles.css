@@ -3242,7 +3242,8 @@ body::before {
 }
 
 .canvas-stage {
-  padding: 18px;
+  padding: clamp(24px, 2.25vw, 38px);
+  overflow: hidden;
   border: 1px solid #c3c9cb;
   border-radius: 4px;
   background: #cbd0d2;
@@ -3319,7 +3320,7 @@ body::before {
   }
 
   .canvas-stage {
-    padding: 10px;
+    padding: 16px;
   }
 }
 
@@ -3419,7 +3420,7 @@ body::before {
   }
 
   .canvas-stage {
-    padding: 5px;
+    padding: 6px;
   }
 
   .canvas-object-tools .drag-target-switch button {

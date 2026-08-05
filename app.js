@@ -496,8 +496,17 @@
     if (!elements.canvasStage || !elements.canvasFrame) {
       return;
     }
-    var availableWidth = elements.canvasStage.clientWidth;
-    var availableHeight = elements.canvasStage.clientHeight;
+    var stageStyle = window.getComputedStyle(elements.canvasStage);
+    var horizontalPadding =
+      (parseFloat(stageStyle.paddingLeft) || 0) +
+      (parseFloat(stageStyle.paddingRight) || 0);
+    var verticalPadding =
+      (parseFloat(stageStyle.paddingTop) || 0) +
+      (parseFloat(stageStyle.paddingBottom) || 0);
+    var availableWidth =
+      elements.canvasStage.clientWidth - horizontalPadding;
+    var availableHeight =
+      elements.canvasStage.clientHeight - verticalPadding;
     if (!availableWidth || !availableHeight) {
       return;
     }
@@ -3525,7 +3534,7 @@
 
   function cacheRefreshUrls() {
     var urls = [
-      "./assets/font-atlas/runtime-glyph-index.json?v=3",
+      "./assets/font-atlas/runtime-glyph-index.json?v=4",
       "./assets/fonts/LongCang-Regular.ttf",
       "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
       "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
@@ -4634,7 +4643,7 @@
         kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
         kalam: "./assets/fonts/Kalam-Bold.ttf",
         princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-      }, "./assets/font-atlas/runtime-glyph-index.json?v=3", function (progress) {
+      }, "./assets/font-atlas/runtime-glyph-index.json?v=4", function (progress) {
         setFontLoadingProgress(progress * 92);
       })
       .then(function () {

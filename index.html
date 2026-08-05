@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=20" />
+    <link rel="stylesheet" href="./styles.css?v=21" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -47,7 +47,7 @@
             <img src="./assets/orange-icon.svg?v=1" alt="" />
           </span>
           <span>
-            <strong>酸橙多图层画布</strong>
+            <strong>直到大地变成一颗酸橙</strong>
           </span>
         </a>
         <div class="topbar-actions">
@@ -63,8 +63,8 @@
         </div>
       </header>
 
-      <main class="workspace">
-        <aside class="layer-panel" aria-label="作品图层">
+      <main class="workspace" data-editor-section="text">
+        <aside class="layer-panel" id="layerPanel" aria-label="作品图层">
           <div class="layer-panel-heading">
             <span>
               <small>COMPOSITION</small>
@@ -97,7 +97,83 @@
           </div>
         </aside>
 
-        <aside class="control-panel" aria-label="字标设置">
+        <nav class="editor-section-nav" id="editorSectionNav" aria-label="编辑功能" role="tablist">
+          <button
+            class="active"
+            id="editorTabText"
+            type="button"
+            role="tab"
+            aria-selected="true"
+            aria-controls="textControlsSection"
+            data-editor-tab="text"
+          >
+            <span aria-hidden="true">T</span>
+            <strong>文字</strong>
+          </button>
+          <button
+            id="editorTabLayout"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="layoutControlsSection"
+            data-editor-tab="layout"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">▦</span>
+            <strong>画面</strong>
+          </button>
+          <button
+            id="editorTabColor"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="colorControlsSection"
+            data-editor-tab="color"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">●</span>
+            <strong>颜色</strong>
+          </button>
+          <button
+            id="editorTabAssets"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="assetLibrarySection"
+            data-editor-tab="assets"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">✦</span>
+            <strong>素材</strong>
+          </button>
+          <button
+            class="mobile-layer-tab"
+            id="editorTabLayers"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="layerPanel"
+            data-editor-tab="layers"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">▱</span>
+            <strong>图层</strong>
+          </button>
+          <button
+            id="editorTabExport"
+            type="button"
+            role="tab"
+            aria-selected="false"
+            aria-controls="exportControlsSection"
+            data-editor-tab="export"
+            tabindex="-1"
+          >
+            <span aria-hidden="true">↓</span>
+            <strong>保存</strong>
+          </button>
+        </nav>
+
+        <aside class="control-panel" aria-label="编辑属性">
           <div class="inspector-heading">
             <span>
               <small>PROPERTIES</small>
@@ -106,7 +182,13 @@
             <span id="activeLayerSummary">花式文字</span>
           </div>
 
-          <section class="control-section first-section" id="textControlsSection">
+          <section
+            class="control-section first-section"
+            id="textControlsSection"
+            role="tabpanel"
+            aria-labelledby="editorTabText"
+            data-editor-panel="text"
+          >
             <div class="section-title">
               <span class="step-number">01</span>
               <h2>写下想说的话</h2>
@@ -145,7 +227,14 @@
             </div>
           </section>
 
-          <section class="control-section">
+          <section
+            class="control-section"
+            id="layoutControlsSection"
+            role="tabpanel"
+            aria-labelledby="editorTabLayout"
+            data-editor-panel="layout"
+            hidden
+          >
             <div class="section-title">
               <span class="step-number">02</span>
               <h2>调整画面</h2>
@@ -273,7 +362,14 @@
             </details>
           </section>
 
-          <section class="control-section color-section">
+          <section
+            class="control-section color-section"
+            id="colorControlsSection"
+            role="tabpanel"
+            aria-labelledby="editorTabColor"
+            data-editor-panel="color"
+            hidden
+          >
             <div class="section-title">
               <span class="step-number">03</span>
               <h2>挑选颜色</h2>
@@ -354,7 +450,14 @@
             </details>
           </section>
 
-          <section class="control-section image-layer-section" id="assetLibrarySection">
+          <section
+            class="control-section image-layer-section"
+            id="assetLibrarySection"
+            role="tabpanel"
+            aria-labelledby="editorTabAssets"
+            data-editor-panel="assets"
+            hidden
+          >
             <div class="section-title">
               <span class="step-number">04</span>
               <h2 id="imageLayerTitle">添加图层</h2>
@@ -464,6 +567,49 @@
             <p class="overlay-hint" id="overlayHint">选择任意图片图层后，可在画布中直接移动、缩放和旋转。</p>
           </section>
 
+          <section
+            class="control-section export-control-section"
+            id="exportControlsSection"
+            role="tabpanel"
+            aria-labelledby="editorTabExport"
+            data-editor-panel="export"
+            hidden
+          >
+            <div class="section-title">
+              <span class="step-number">05</span>
+              <h2>导出作品</h2>
+            </div>
+            <div class="export-bar">
+              <div class="export-copy">
+                <span class="export-icon" aria-hidden="true">↧</span>
+                <span>
+                  <strong id="exportTitle">保存作品</strong>
+                  <small id="exportDescription">3200 × 1486 px</small>
+                </span>
+              </div>
+              <label class="scale-select" id="imageQualityControl">
+                <span>清晰度</span>
+                <select id="exportScale" aria-label="导出清晰度">
+                  <option value="1">标准 · 1×</option>
+                  <option value="2" selected>高清 · 2×</option>
+                  <option value="3">超清 · 3×</option>
+                </select>
+              </label>
+              <label class="scale-select" id="gifQualityControl" hidden>
+                <span>GIF 体积</span>
+                <select id="gifQuality" aria-label="GIF 清晰度与体积">
+                  <option value="compact">轻巧 · 640 px</option>
+                  <option value="balanced" selected>推荐 · 800 px</option>
+                  <option value="high">高清 · 1024 px</option>
+                </select>
+              </label>
+              <button class="download-button" id="downloadButton" type="button">
+                <span id="downloadButtonIcon" aria-hidden="true">↓</span>
+                <span id="downloadButtonLabel">保存图片</span>
+              </button>
+            </div>
+          </section>
+
         </aside>
 
         <section class="preview-panel" aria-label="透明字标预览">
@@ -536,35 +682,6 @@
             <span id="renderStatus" role="status" aria-live="polite">画面已准备好</span>
           </div>
 
-          <div class="export-bar">
-            <div class="export-copy">
-              <span class="export-icon" aria-hidden="true">↧</span>
-              <span>
-                <strong id="exportTitle">保存作品</strong>
-                <small id="exportDescription">3200 × 1486 px</small>
-              </span>
-            </div>
-            <label class="scale-select" id="imageQualityControl">
-              <span>清晰度</span>
-              <select id="exportScale" aria-label="导出清晰度">
-                <option value="1">标准 · 1×</option>
-                <option value="2" selected>高清 · 2×</option>
-                <option value="3">超清 · 3×</option>
-              </select>
-            </label>
-            <label class="scale-select" id="gifQualityControl" hidden>
-              <span>GIF 体积</span>
-              <select id="gifQuality" aria-label="GIF 清晰度与体积">
-                <option value="compact">轻巧 · 640 px</option>
-                <option value="balanced" selected>推荐 · 800 px</option>
-                <option value="high">高清 · 1024 px</option>
-              </select>
-            </label>
-            <button class="download-button" id="downloadButton" type="button">
-              <span id="downloadButtonIcon" aria-hidden="true">↓</span>
-              <span id="downloadButtonLabel">保存图片</span>
-            </button>
-          </div>
         </section>
       </main>
 
@@ -665,7 +782,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=25"></script>
+    <script src="./app.js?v=26"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

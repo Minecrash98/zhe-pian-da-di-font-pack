@@ -82,8 +82,15 @@
   var pendingSaveObjectUrl = "";
   var pendingSaveDimensions = "";
   var saveAssistReturnFocus = null;
+  var activeEditorSection = "text";
+  var stackedEditorQuery = window.matchMedia("(max-width: 900px)");
 
   var elements = {
+    workspace: document.querySelector(".workspace"),
+    editorSectionNav: document.getElementById("editorSectionNav"),
+    editorSectionTabs: document.querySelectorAll("[data-editor-tab]"),
+    editorSectionPanels: document.querySelectorAll("[data-editor-panel]"),
+    layerPanel: document.getElementById("layerPanel"),
     canvas: document.getElementById("logoCanvas"),
     canvasStage: document.getElementById("canvasStage"),
     canvasFrame: document.getElementById("canvasFrame"),
@@ -396,6 +403,59 @@
     requestAnimationFrame(function () {
       anchorFixedViewport(resetPanel);
     });
+  }
+
+  function editorSectionForLayer(layer) {
+    return layer && layer.type !== "artwork" ? "assets" : "text";
+  }
+
+  function setEditorSection(section, options) {
+    options = options || {};
+    var allowed = ["text", "layout", "color", "assets", "layers", "export"];
+    if (allowed.indexOf(section) < 0) {
+      section = "text";
+    }
+    if (section === "layers" && !stackedEditorQuery.matches) {
+      section = "assets";
+    }
+
+    activeEditorSection = section;
+    elements.workspace.dataset.editorSection = section;
+    elements.editorSectionTabs.forEach(function (button) {
+      var active = button.dataset.editorTab === section;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+    });
+    elements.editorSectionPanels.forEach(function (panel) {
+      panel.hidden = panel.dataset.editorPanel !== section;
+    });
+
+    if (options.resetScroll !== false) {
+      elements.controlPanel.scrollTop = 0;
+    }
+    requestAnimationFrame(function () {
+      refreshCanvasGeometry();
+    });
+  }
+
+  function activateEditorSection(section) {
+    if (["text", "layout", "color"].indexOf(section) >= 0) {
+      selectLayer("artwork", {
+        showSelection: true,
+        render: false,
+        syncEditorSection: false
+      });
+    }
+    setEditorSection(section);
+  }
+
+  function normalizeEditorSectionForViewport() {
+    if (!stackedEditorQuery.matches && activeEditorSection === "layers") {
+      setEditorSection("assets", { resetScroll: false });
+    } else {
+      requestAnimationFrame(refreshCanvasGeometry);
+    }
   }
 
   function canvasRatioSourceImage() {
@@ -796,6 +856,9 @@
     updateOverlayInterface();
     updateDragTargetInterface();
     updateCanvasSelection(lastPreviewResult);
+    if (options.syncEditorSection !== false) {
+      setEditorSection(editorSectionForLayer(layer), { resetScroll: false });
+    }
     if (options.render !== false) {
       scheduleRender();
     }
@@ -837,6 +900,9 @@
     canvasSelectionVisible = next.type !== "artwork";
     updateEditorModeInterface();
     updateOverlayInterface();
+    if (activeEditorSection !== "layers") {
+      setEditorSection(editorSectionForLayer(next), { resetScroll: false });
+    }
     startGifPreviewLoop();
     scheduleRender();
     if (notifyUser) {
@@ -4248,6 +4314,40 @@
     control.addEventListener("change", scheduleRender);
   });
 
+  elements.editorSectionTabs.forEach(function (button) {
+    button.addEventListener("click", function () {
+      activateEditorSection(button.dataset.editorTab);
+    });
+  });
+
+  elements.editorSectionNav.addEventListener("keydown", function (event) {
+    if (["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(event.key) < 0) {
+      return;
+    }
+    var visibleTabs = Array.from(elements.editorSectionTabs).filter(
+      function (button) {
+        return button.offsetParent !== null;
+      }
+    );
+    var activeIndex = visibleTabs.indexOf(document.activeElement);
+    if (activeIndex < 0) {
+      activeIndex = visibleTabs.findIndex(function (button) {
+        return button.classList.contains("active");
+      });
+    }
+    if (event.key === "Home") {
+      activeIndex = 0;
+    } else if (event.key === "End") {
+      activeIndex = visibleTabs.length - 1;
+    } else {
+      activeIndex += event.key === "ArrowRight" ? 1 : -1;
+      activeIndex = (activeIndex + visibleTabs.length) % visibleTabs.length;
+    }
+    event.preventDefault();
+    visibleTabs[activeIndex].focus();
+    visibleTabs[activeIndex].click();
+  });
+
   elements.assetCategoryButtons.forEach(function (button) {
     button.addEventListener("click", function () {
       if (elements.downloadButton.classList.contains("loading")) {
@@ -4357,11 +4457,10 @@
     removeLayer(activeLayerId, true);
   });
   elements.focusTextControlsButton.addEventListener("click", function () {
-    selectLayer("artwork");
-    elements.textControlsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+    activateEditorSection("text");
   });
   elements.focusAssetControlsButton.addEventListener("click", function () {
-    elements.assetLibrarySection.scrollIntoView({ behavior: "smooth", block: "start" });
+    activateEditorSection("assets");
   });
 
   document.querySelectorAll(".canvas-ratio-option").forEach(function (button) {
@@ -4615,6 +4714,14 @@
     canvasStageResizeObserver.observe(elements.canvasStage);
   }
   window.addEventListener("resize", refreshCanvasGeometry);
+  if (stackedEditorQuery.addEventListener) {
+    stackedEditorQuery.addEventListener(
+      "change",
+      normalizeEditorSectionForViewport
+    );
+  } else if (stackedEditorQuery.addListener) {
+    stackedEditorQuery.addListener(normalizeEditorSectionForViewport);
+  }
   window.addEventListener(
     "scroll",
     function () {
@@ -4663,6 +4770,7 @@
   }
   anchorFixedViewportAfterLayout(true);
   applyStateToControls();
+  setEditorSection(activeEditorSection, { resetScroll: false });
   renderPreview();
   restoreCachedOverlay();
   if (document.fonts && document.fonts.load) {

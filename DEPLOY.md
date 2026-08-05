@@ -16,7 +16,7 @@ npx wrangler pages deploy . --project-name=你的项目名
 
 ## 流量统计
 
-这是纯静态 Pages 项目，没有 Pages Functions，因此 `Functions Metrics` 不会显示普通页面访问量。需要在 `Workers & Pages → 项目 → Metrics → Web Analytics` 中启用 Web Analytics，并在启用后重新部署一次。Cloudflare 会在 HTML 中自动注入统计脚本，之后到控制台的 `Web Analytics` 页面查看访客和页面浏览数据。
+这是纯静态 Pages 项目，没有 Pages Functions，因此 `Functions Metrics` 不会显示普通页面访问量。本站已在 `index.html` 中手动嵌入 Cloudflare Web Analytics beacon；发布后到控制台的 `Web Analytics` 页面查看访客和页面浏览数据即可，不依赖 Pages 项目页的一键启用开关。
 
 如果一键启用提示错误，先确认当前成员拥有 `Account Settings Write` 权限，并在账号级 `Web Analytics` 页面检查是否已有同域名的残留配置。也可以从该页面手动添加 Pages 域名，再把生成的 beacon snippet 放入 `index.html`。
 
@@ -37,3 +37,5 @@ npx wrangler pages deploy . --project-name=你的项目名
 ## 隐私说明
 
 用户选择的图片只由浏览器读取并存入当前浏览器的 IndexedDB，不会发送到服务器。文字排版、图片叠加、透明 PNG 和 GIF 合成导出也全部在浏览器本地完成。
+
+本站使用 Cloudflare Web Analytics 统计匿名访问量和页面性能，不会上传用户导入的图片或制作内容。

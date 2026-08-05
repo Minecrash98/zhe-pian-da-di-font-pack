@@ -11,11 +11,9 @@
     fontStyle: "playful",
     irregularity: 58,
     density: 64,
-    lineGap: 110,
-    subtitleGap: 100,
     artworkScale: 100,
     artworkX: 50,
-    artworkY: 50,
+    artworkY: 36,
     artworkRotation: 0,
     outline: true,
     titleShadowEnabled: true,
@@ -52,20 +50,80 @@
     characters: [],
     decorations: []
   };
-  var layerSequence = 0;
-  var layers = [
+  var textLayerDefinitions = [
     {
-      id: "artwork",
-      type: "artwork",
-      name: "花式文字",
-      visible: true,
-      locked: false
+      id: "text-line-1",
+      textKey: "line1",
+      name: "第一行中文",
+      thumbnail: "1",
+      lineIndex: 0,
+      x: 50,
+      y: 36,
+      scale: 100,
+      rotation: 0
+    },
+    {
+      id: "text-line-2",
+      textKey: "line2",
+      name: "第二行中文",
+      thumbnail: "2",
+      lineIndex: 1,
+      x: 50,
+      y: 68,
+      scale: 100,
+      rotation: 0
+    },
+    {
+      id: "text-subtitle",
+      textKey: "subtitle",
+      name: "英文小字",
+      thumbnail: "EN",
+      lineIndex: 2,
+      x: 50,
+      y: 87,
+      scale: 100,
+      rotation: 0
     }
   ];
-  var activeLayerId = "artwork";
+  var layerSequence = 0;
+  var textLayerStore = Object.create(null);
+
+  function createDefaultTextLayers() {
+    textLayerStore = Object.create(null);
+    textLayerDefinitions.forEach(function (definition) {
+      textLayerStore[definition.id] = {
+        id: definition.id,
+        type: "text",
+        textKey: definition.textKey,
+        name: definition.name,
+        thumbnail: definition.thumbnail,
+        lineIndex: definition.lineIndex,
+        x: definition.x,
+        y: definition.y,
+        scale: definition.scale,
+        rotation: definition.rotation,
+        defaultX: definition.x,
+        defaultY: definition.y,
+        defaultScale: definition.scale,
+        defaultRotation: definition.rotation,
+        visible: true,
+        locked: false,
+        lastIndex: 0
+      };
+    });
+    return [
+      textLayerStore["text-subtitle"],
+      textLayerStore["text-line-2"],
+      textLayerStore["text-line-1"]
+    ];
+  }
+
+  var layers = createDefaultTextLayers();
+  var activeLayerId = "text-line-1";
   var draggedLayerId = "";
   var animationStartedAt = performance.now();
-  var activeDragTarget = "artwork";
+  var activeDragTarget = "text-line-1";
+  var activeColorTarget = "primaryColor";
   var canvasSelectionVisible = false;
   var canvasDragging = false;
   var canvasDragStart = null;
@@ -97,20 +155,16 @@
     canvasCornerLabel: document.getElementById("canvasCornerLabel"),
     canvasSelection: document.getElementById("canvasSelection"),
     canvasSelectionLabel: document.getElementById("canvasSelectionLabel"),
+    canvasSelectionDeleteButton: document.getElementById(
+      "canvasSelectionDeleteButton"
+    ),
     canvasRotationHandle: document.getElementById("canvasRotationHandle"),
     canvasScaleHandle: document.getElementById("canvasScaleHandle"),
     canvasResetButton: document.getElementById("canvasResetButton"),
     layerList: document.getElementById("layerList"),
     layerCount: document.getElementById("layerCount"),
-    moveLayerUpButton: document.getElementById("moveLayerUpButton"),
-    moveLayerDownButton: document.getElementById("moveLayerDownButton"),
-    duplicateLayerButton: document.getElementById("duplicateLayerButton"),
-    deleteLayerButton: document.getElementById("deleteLayerButton"),
-    focusTextControlsButton: document.getElementById(
-      "focusTextControlsButton"
-    ),
-    focusAssetControlsButton: document.getElementById(
-      "focusAssetControlsButton"
+    textLayerToggleButtons: document.querySelectorAll(
+      "[data-text-layer-toggle]"
     ),
     activeLayerSummary: document.getElementById("activeLayerSummary"),
     textControlsSection: document.getElementById("textControlsSection"),
@@ -128,10 +182,6 @@
     autoCanvasRatioShape: document.getElementById("autoCanvasRatioShape"),
     density: document.getElementById("density"),
     densityValue: document.getElementById("densityValue"),
-    lineGap: document.getElementById("lineGap"),
-    lineGapValue: document.getElementById("lineGapValue"),
-    subtitleGap: document.getElementById("subtitleGap"),
-    subtitleGapValue: document.getElementById("subtitleGapValue"),
     artworkScale: document.getElementById("artworkScale"),
     artworkScaleValue: document.getElementById("artworkScaleValue"),
     artworkX: document.getElementById("artworkX"),
@@ -141,6 +191,7 @@
     artworkRotation: document.getElementById("artworkRotation"),
     artworkRotationValue: document.getElementById("artworkRotationValue"),
     resetArtworkButton: document.getElementById("resetArtworkButton"),
+    selectedTextLayerName: document.getElementById("selectedTextLayerName"),
     titleShadowEnabled: document.getElementById("titleShadowEnabled"),
     titleShadowControls: document.getElementById("titleShadowControls"),
     titleShadowColor: document.getElementById("titleShadowColor"),
@@ -151,8 +202,7 @@
     titleShadowOffsetYValue: document.getElementById("titleShadowOffsetYValue"),
     titleShadowBlur: document.getElementById("titleShadowBlur"),
     titleShadowBlurValue: document.getElementById("titleShadowBlurValue"),
-    dragArtworkButton: document.getElementById("dragArtworkButton"),
-    dragOverlayButton: document.getElementById("dragOverlayButton"),
+    canvasActiveObjectName: document.getElementById("canvasActiveObjectName"),
     outline: document.getElementById("outline"),
     primaryColor: document.getElementById("primaryColor"),
     primaryColorValue: document.getElementById("primaryColorValue"),
@@ -160,6 +210,20 @@
     accentColorValue: document.getElementById("accentColorValue"),
     skyColor: document.getElementById("skyColor"),
     skyColorValue: document.getElementById("skyColorValue"),
+    colorTargetButtons: document.querySelectorAll("[data-color-target]"),
+    colorPresetButtons: document.querySelectorAll("[data-color-preset]"),
+    palettePresetButtons: document.querySelectorAll("[data-palette]"),
+    colorEditorTargetLabel: document.getElementById(
+      "colorEditorTargetLabel"
+    ),
+    colorEditorPreview: document.getElementById("colorEditorPreview"),
+    colorHexInput: document.getElementById("colorHexInput"),
+    colorHue: document.getElementById("colorHue"),
+    colorHueValue: document.getElementById("colorHueValue"),
+    colorSaturation: document.getElementById("colorSaturation"),
+    colorSaturationValue: document.getElementById("colorSaturationValue"),
+    colorLightness: document.getElementById("colorLightness"),
+    colorLightnessValue: document.getElementById("colorLightnessValue"),
     overlayFile: document.getElementById("overlayFile"),
     imageLayerTitle: document.getElementById("imageLayerTitle"),
     officialAssetsSummaryHint: document.getElementById(
@@ -406,7 +470,7 @@
   }
 
   function editorSectionForLayer(layer) {
-    return layer && layer.type !== "artwork" ? "assets" : "text";
+    return isImageLayer(layer) ? "assets" : "text";
   }
 
   function setEditorSection(section, options) {
@@ -421,6 +485,7 @@
 
     activeEditorSection = section;
     elements.workspace.dataset.editorSection = section;
+    document.body.dataset.activeEditorSection = section;
     elements.editorSectionTabs.forEach(function (button) {
       var active = button.dataset.editorTab === section;
       button.classList.toggle("active", active);
@@ -440,13 +505,6 @@
   }
 
   function activateEditorSection(section) {
-    if (["text", "layout", "color"].indexOf(section) >= 0) {
-      selectLayer("artwork", {
-        showSelection: true,
-        render: false,
-        syncEditorSection: false
-      });
-    }
     setEditorSection(section);
   }
 
@@ -629,13 +687,31 @@
   }
 
   function getActiveLayer() {
-    return getLayer(activeLayerId) || layers[0];
+    return getLayer(activeLayerId) || layers[0] || null;
+  }
+
+  function isTextLayer(layer) {
+    return Boolean(layer && layer.type === "text");
+  }
+
+  function isImageLayer(layer) {
+    return Boolean(layer && (layer.type === "image" || layer.type === "gif"));
+  }
+
+  function getTextLayer(layerId) {
+    return textLayerStore[layerId] || null;
+  }
+
+  function getActiveTextLayer() {
+    var active = getActiveLayer();
+    if (isTextLayer(active)) {
+      return active;
+    }
+    return layers.find(isTextLayer) || null;
   }
 
   function getImageLayers() {
-    return layers.filter(function (layer) {
-      return layer.type === "image" || layer.type === "gif";
-    });
+    return layers.filter(isImageLayer);
   }
 
   function getAnimatedLayers() {
@@ -656,8 +732,8 @@
   }
 
   function layerTypeLabel(layer) {
-    if (layer.type === "artwork") {
-      return "花式字体与装饰";
+    if (layer.type === "text") {
+      return layer.textKey === "subtitle" ? "英文文字图层" : "中文文字图层";
     }
     if (layer.type === "gif") {
       return "动态 GIF 图层";
@@ -689,7 +765,21 @@
 
   function syncActiveLayerFromControls() {
     var layer = getActiveLayer();
-    if (!layer || layer.type === "artwork" || !elements.overlayScale) {
+    if (!layer) {
+      return;
+    }
+    if (isTextLayer(layer)) {
+      layer.scale = Number(elements.artworkScale.value);
+      layer.x = Number(elements.artworkX.value);
+      layer.y = Number(elements.artworkY.value);
+      layer.rotation = Number(elements.artworkRotation.value);
+      state.artworkScale = layer.scale;
+      state.artworkX = layer.x;
+      state.artworkY = layer.y;
+      state.artworkRotation = layer.rotation;
+      return;
+    }
+    if (!isImageLayer(layer) || !elements.overlayScale) {
       return;
     }
     layer.scale = Number(elements.overlayScale.value);
@@ -701,10 +791,27 @@
   }
 
   function syncLayerControls(layer) {
-    if (!layer || layer.type === "artwork") {
+    if (!layer) {
       selectedOfficialAsset = null;
       state.overlayLocked = false;
-      activeDragTarget = "artwork";
+      activeDragTarget = "";
+      updateTextTransformInterface(null);
+      return;
+    }
+
+    if (isTextLayer(layer)) {
+      selectedOfficialAsset = null;
+      state.overlayLocked = false;
+      state.artworkScale = layer.scale;
+      state.artworkX = layer.x;
+      state.artworkY = layer.y;
+      state.artworkRotation = layer.rotation;
+      activeDragTarget = layer.id;
+      elements.artworkScale.value = layer.scale;
+      elements.artworkX.value = layer.x;
+      elements.artworkY.value = layer.y;
+      elements.artworkRotation.value = layer.rotation;
+      updateTextTransformInterface(layer);
       return;
     }
 
@@ -716,7 +823,7 @@
     state.overlayOpacity = layer.opacity;
     state.overlayLayer = "foreground";
     state.overlayLocked = Boolean(layer.locked);
-    activeDragTarget = "overlay";
+    activeDragTarget = layer.id;
 
     elements.overlayScale.value = layer.scale;
     elements.overlayX.value = layer.x;
@@ -724,18 +831,49 @@
     elements.overlayRotation.value = layer.rotation;
     elements.overlayOpacity.value = layer.opacity;
     elements.overlayLayer.value = "foreground";
+    updateTextTransformInterface(null);
   }
 
   function updateLayerActionState() {
     var layer = getActiveLayer();
-    var index = layers.indexOf(layer);
-    var isArtwork = !layer || layer.type === "artwork";
     elements.layerCount.value = layers.length;
-    elements.moveLayerUpButton.disabled = index < 0 || index === layers.length - 1;
-    elements.moveLayerDownButton.disabled = index <= 0;
-    elements.duplicateLayerButton.disabled = isArtwork;
-    elements.deleteLayerButton.disabled = isArtwork;
     elements.activeLayerSummary.textContent = layer ? layer.name : "未选择";
+    updateTextLayerToggleInterface();
+  }
+
+  function updateTextTransformInterface(layer) {
+    var activeText = isTextLayer(layer) ? layer : null;
+    [
+      elements.artworkScale,
+      elements.artworkX,
+      elements.artworkY,
+      elements.artworkRotation,
+      elements.resetArtworkButton
+    ].forEach(function (control) {
+      if (control) {
+        control.disabled = !activeText || activeText.locked;
+      }
+    });
+    if (elements.selectedTextLayerName) {
+      elements.selectedTextLayerName.textContent = activeText
+        ? activeText.name + " · 大小与位置"
+        : "请先选中文字图层";
+    }
+  }
+
+  function updateTextLayerToggleInterface() {
+    if (!elements.textLayerToggleButtons) {
+      return;
+    }
+    elements.textLayerToggleButtons.forEach(function (button) {
+      var active = Boolean(getLayer(button.dataset.textLayerToggle));
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-pressed", String(active));
+      var status = button.querySelector("b");
+      if (status) {
+        status.textContent = active ? "已启用" : "未启用";
+      }
+    });
   }
 
   function clearLayerDropIndicators() {
@@ -783,6 +921,8 @@
         var type = document.createElement("small");
         var visibility = document.createElement("button");
         var lock = document.createElement("button");
+        var actions = document.createElement("span");
+        var layerIndex = layers.indexOf(layer);
 
         item.className = "layer-item";
         item.dataset.layerId = layer.id;
@@ -797,8 +937,8 @@
         handle.setAttribute("aria-hidden", "true");
 
         thumbnail.className = "layer-thumbnail";
-        if (layer.type === "artwork") {
-          thumbnail.textContent = "T";
+        if (isTextLayer(layer)) {
+          thumbnail.textContent = layer.thumbnail || "T";
         } else {
           var image = document.createElement("img");
           image.alt = "";
@@ -831,11 +971,53 @@
         lock.setAttribute("aria-label", lock.title);
         lock.textContent = layer.locked ? "◆" : "◇";
 
+        actions.className = "layer-entry-actions";
+        [
+          {
+            action: "move-up",
+            label: "上移一层",
+            text: "↑",
+            disabled: layerIndex === layers.length - 1
+          },
+          {
+            action: "move-down",
+            label: "下移一层",
+            text: "↓",
+            disabled: layerIndex === 0
+          },
+          {
+            action: "duplicate",
+            label: "复制图层",
+            text: "复制",
+            hidden: isTextLayer(layer)
+          },
+          {
+            action: "delete",
+            label: isTextLayer(layer) ? "停用文字图层" : "删除图层",
+            text: isTextLayer(layer) ? "停用" : "删除",
+            danger: true
+          }
+        ].forEach(function (config) {
+          if (config.hidden) {
+            return;
+          }
+          var button = document.createElement("button");
+          button.type = "button";
+          button.dataset.layerAction = config.action;
+          button.title = config.label;
+          button.setAttribute("aria-label", config.label + "：" + layer.name);
+          button.textContent = config.text;
+          button.disabled = Boolean(config.disabled);
+          button.classList.toggle("danger", Boolean(config.danger));
+          actions.appendChild(button);
+        });
+
         item.appendChild(handle);
         item.appendChild(thumbnail);
         item.appendChild(copy);
         item.appendChild(visibility);
         item.appendChild(lock);
+        item.appendChild(actions);
         fragment.appendChild(item);
       });
     elements.layerList.replaceChildren(fragment);
@@ -866,11 +1048,11 @@
 
   function addLayer(layer, options) {
     options = options || {};
-    var artworkIndex = layers.findIndex(function (item) {
-      return item.type === "artwork";
+    var firstTextIndex = layers.findIndex(function (item) {
+      return isTextLayer(item);
     });
-    if (options.belowArtwork && artworkIndex >= 0) {
-      layers.splice(artworkIndex, 0, layer);
+    if (options.belowArtwork && firstTextIndex >= 0) {
+      layers.splice(firstTextIndex, 0, layer);
     } else {
       layers.push(layer);
     }
@@ -881,11 +1063,14 @@
 
   function removeLayer(layerId, notifyUser) {
     var layer = getLayer(layerId);
-    if (!layer || layer.type === "artwork") {
+    if (!layer) {
       return;
     }
     var index = layers.indexOf(layer);
     layers.splice(index, 1);
+    if (isTextLayer(layer)) {
+      layer.lastIndex = index;
+    }
     if (
       layer.objectUrl &&
       !layers.some(function (item) {
@@ -894,24 +1079,58 @@
     ) {
       URL.revokeObjectURL(layer.objectUrl);
     }
-    var next = layers[Math.min(index, layers.length - 1)] || layers[0];
-    activeLayerId = next.id;
+    var next = layers[Math.min(index, layers.length - 1)] || layers[0] || null;
+    activeLayerId = next ? next.id : "";
     syncLayerControls(next);
-    canvasSelectionVisible = next.type !== "artwork";
+    canvasSelectionVisible = Boolean(next && !next.locked);
     updateEditorModeInterface();
     updateOverlayInterface();
-    if (activeEditorSection !== "layers") {
+    if (next && activeEditorSection !== "layers") {
       setEditorSection(editorSectionForLayer(next), { resetScroll: false });
     }
     startGifPreviewLoop();
     scheduleRender();
     if (notifyUser) {
-      showToast("图层已删除");
+      showToast(
+        isTextLayer(layer)
+          ? layer.name + "已停用，可随时重新启用"
+          : "图层已删除"
+      );
     }
   }
 
-  function moveActiveLayer(delta) {
-    var layer = getActiveLayer();
+  function setTextLayerActive(layerId, enabled, notifyUser) {
+    var layer = getTextLayer(layerId);
+    if (!layer) {
+      return;
+    }
+    var active = Boolean(getLayer(layerId));
+    if (enabled === active) {
+      if (enabled) {
+        selectLayer(layerId);
+      }
+      return;
+    }
+    if (!enabled) {
+      removeLayer(layerId, notifyUser);
+      return;
+    }
+    layer.visible = true;
+    var insertAt = clamp(
+      Number.isFinite(layer.lastIndex) ? layer.lastIndex : layers.length,
+      0,
+      layers.length
+    );
+    layers.splice(insertAt, 0, layer);
+    selectLayer(layer.id, { showSelection: true, render: false });
+    scheduleRender();
+    if (notifyUser) {
+      showToast(layer.name + "已启用");
+    }
+  }
+
+  function moveLayer(layerId, delta) {
+    var layer = getLayer(layerId);
     var index = layers.indexOf(layer);
     var nextIndex = clamp(index + delta, 0, layers.length - 1);
     if (index < 0 || index === nextIndex) {
@@ -926,7 +1145,7 @@
   function duplicateActiveLayer() {
     syncActiveLayerFromControls();
     var layer = getActiveLayer();
-    if (!layer || layer.type === "artwork") {
+    if (!isImageLayer(layer)) {
       return;
     }
     var duplicate = Object.assign({}, layer, {
@@ -983,10 +1202,18 @@
   }
 
   function resetArtworkTransform() {
-    state.artworkScale = defaults.artworkScale;
-    state.artworkX = defaults.artworkX;
-    state.artworkY = defaults.artworkY;
-    state.artworkRotation = defaults.artworkRotation;
+    var layer = getActiveLayer();
+    if (!isTextLayer(layer)) {
+      return;
+    }
+    layer.scale = layer.defaultScale;
+    layer.x = layer.defaultX;
+    layer.y = layer.defaultY;
+    layer.rotation = layer.defaultRotation;
+    state.artworkScale = layer.scale;
+    state.artworkX = layer.x;
+    state.artworkY = layer.y;
+    state.artworkRotation = layer.rotation;
     if (elements.artworkScale) {
       elements.artworkScale.value = state.artworkScale;
       elements.artworkX.value = state.artworkX;
@@ -997,45 +1224,38 @@
 
   function updateDragTargetInterface() {
     var activeLayer = getActiveLayer();
-    var artworkActive = !activeLayer || activeLayer.type === "artwork";
-    var overlayActiveAndLocked =
-      !artworkActive && Boolean(activeLayer) && activeLayer.locked;
-    activeDragTarget = artworkActive ? "artwork" : "overlay";
-    elements.dragArtworkButton.classList.toggle("active", artworkActive);
-    elements.dragArtworkButton.setAttribute("aria-pressed", String(artworkActive));
-    elements.dragOverlayButton.classList.toggle("active", !artworkActive);
-    elements.dragOverlayButton.setAttribute("aria-pressed", String(!artworkActive));
-    elements.dragOverlayButton.disabled = artworkActive;
-    elements.dragOverlayButton.textContent = artworkActive
-      ? "图片图层"
-      : activeLayer.name;
-    elements.canvasResetButton.disabled = overlayActiveAndLocked;
+    var locked = Boolean(activeLayer && activeLayer.locked);
+    activeDragTarget = activeLayer ? activeLayer.id : "";
+    if (elements.canvasActiveObjectName) {
+      elements.canvasActiveObjectName.textContent = activeLayer
+        ? activeLayer.name
+        : "未选择";
+    }
+    elements.canvasResetButton.disabled = !activeLayer || locked;
     elements.canvasFrame.classList.toggle(
       "active-overlay-locked",
-      overlayActiveAndLocked
+      locked
     );
     elements.canvas.setAttribute(
       "title",
-      artworkActive
-        ? "拖动文字与装饰"
-        : overlayActiveAndLocked
-          ? "图片已锁定"
-          : "拖动加入的图片"
+      !activeLayer
+        ? "选择一个图层后可在画布内调整"
+        : locked
+          ? activeLayer.name + "已锁定"
+          : "拖动" + activeLayer.name
     );
   }
 
   function setDragTarget(target) {
-    activeDragTarget =
-      target === "overlay" && getActiveLayer().type !== "artwork"
-        ? "overlay"
-        : "artwork";
+    var layer = getLayer(target) || getActiveLayer();
+    activeDragTarget = layer ? layer.id : "";
     updateDragTargetInterface();
     updateCanvasSelection(lastPreviewResult);
   }
 
   function setOverlayLocked(locked, notifyUser) {
     var layer = getActiveLayer();
-    if (!layer || layer.type === "artwork") {
+    if (!isImageLayer(layer)) {
       return;
     }
     layer.locked = Boolean(locked);
@@ -1046,7 +1266,7 @@
     elements.canvasFrame.classList.remove("dragging", "manipulating");
     canvasSelectionVisible = !layer.locked;
     updateOverlayInterface();
-    setDragTarget("overlay");
+    setDragTarget(layer.id);
     renderLayerList();
     scheduleRender();
     if (notifyUser) {
@@ -1070,7 +1290,7 @@
       elements.overlayLayer.value = state.overlayLayer;
     }
     var layer = getActiveLayer();
-    if (layer && layer.type !== "artwork") {
+    if (isImageLayer(layer)) {
       layer.scale = state.overlayScale;
       layer.x = state.overlayX;
       layer.y = state.overlayY;
@@ -1405,7 +1625,7 @@
       return;
     }
     var layer = getActiveLayer();
-    var hasImage = Boolean(layer && layer.type !== "artwork");
+    var hasImage = isImageLayer(layer);
     var activeImage = hasImage ? imageForLayer(layer) : null;
     var locked = hasImage && layer.locked;
     if (hasImage) {
@@ -1418,7 +1638,6 @@
     elements.overlayPlaceholder.hidden = hasImage;
     elements.canvasFrame.classList.toggle("has-overlay", getImageLayers().length > 0);
     elements.canvasFrame.classList.toggle("dragging", canvasDragging);
-    elements.dragOverlayButton.disabled = !hasImage;
     elements.overlayLockButton.disabled = !hasImage;
     elements.overlayLockButton.setAttribute(
       "aria-pressed",
@@ -1477,7 +1696,9 @@
           formatFileSize(layer.bytes || 0);
       }
     } else {
-      elements.overlayFileName.textContent = "当前选中：花式文字";
+      elements.overlayFileName.textContent = layer
+        ? "当前选中：" + layer.name
+        : "还没有选中图层";
       elements.overlayFileMeta.textContent =
         getImageLayers().length
           ? "在左侧选择图片图层即可调整"
@@ -1524,7 +1745,7 @@
 
   function drawLayerRange(ctx, width, height, start, end, time, forcedImages) {
     layers.slice(start, end).forEach(function (layer) {
-      if (layer.type === "artwork" || !layer.visible) {
+      if (!isImageLayer(layer) || !layer.visible) {
         return;
       }
       drawOverlayImage(
@@ -1537,20 +1758,48 @@
     });
   }
 
-  function artworkTransformScale(width, height) {
+  function textBaseScale(width, height) {
     var fittedBaseScale = width / height >= 1.98 ? 0.88 : 0.94;
-    return fittedBaseScale * clamp(state.artworkScale / 100, 0.4, 1.8);
+    return fittedBaseScale;
   }
 
-  function applyArtworkTransform(ctx, width, height) {
-    var scale = artworkTransformScale(width, height);
+  function textLayerScale(layer, width, height) {
+    return textBaseScale(width, height) * clamp(layer.scale / 100, 0.2, 2.2);
+  }
+
+  function applyTextLayerTransform(ctx, width, height, layer, entry) {
+    var scale = textLayerScale(layer, width, height);
+    var bounds = entry.bounds;
+    var localCenterX = (bounds.left + bounds.right) / 2;
+    var localCenterY = (bounds.top + bounds.bottom) / 2;
     ctx.translate(
-      width * (state.artworkX / 100),
-      height * (state.artworkY / 100)
+      width * (layer.x / 100),
+      height * (layer.y / 100)
     );
-    ctx.rotate((state.artworkRotation * Math.PI) / 180);
+    ctx.rotate((layer.rotation * Math.PI) / 180);
     ctx.scale(scale, scale);
-    ctx.translate(-width / 2, -height / 2);
+    ctx.translate(-localCenterX, -localCenterY);
+  }
+
+  function textLayerGeometry(layer, entry, width, height) {
+    if (!layer || !entry) {
+      return null;
+    }
+    var scale = textLayerScale(layer, width, height);
+    return {
+      centerX: width * (layer.x / 100),
+      centerY: height * (layer.y / 100),
+      width: (entry.bounds.right - entry.bounds.left) * scale,
+      height: (entry.bounds.bottom - entry.bounds.top) * scale,
+      angle: layer.rotation,
+      label:
+        layer.name +
+        " · " +
+        Math.round(layer.scale) +
+        "% · " +
+        Math.round(layer.rotation) +
+        "°"
+    };
   }
 
   function normalizeRotation(value) {
@@ -1565,12 +1814,11 @@
     var width = result.width;
     var height = result.height;
 
-    if (target !== "artwork") {
-      var layer = target === "overlay" ? getActiveLayer() : getLayer(target);
+    var layer = getLayer(target);
+    if (isImageLayer(layer)) {
       var layerImage = imageForLayer(layer);
       if (
         !layer ||
-        layer.type === "artwork" ||
         layer.locked ||
         !layer.visible ||
         !layerImage ||
@@ -1597,40 +1845,15 @@
       };
     }
 
-    var artworkLayer = getLayer("artwork");
-    if (!artworkLayer || !artworkLayer.visible || artworkLayer.locked) {
+    if (!isTextLayer(layer) || !layer.visible || layer.locked) {
       return null;
     }
-
-    var bounds = result.artworkBounds;
-    if (!bounds) {
-      return null;
-    }
-    var scale = artworkTransformScale(width, height);
-    var boundsCenterX = (bounds.left + bounds.right) / 2;
-    var boundsCenterY = (bounds.top + bounds.bottom) / 2;
-    var offsetX = (boundsCenterX - width / 2) * scale;
-    var offsetY = (boundsCenterY - height / 2) * scale;
-    var radians = (state.artworkRotation * Math.PI) / 180;
-    return {
-      centerX:
-        width * (state.artworkX / 100) +
-        offsetX * Math.cos(radians) -
-        offsetY * Math.sin(radians),
-      centerY:
-        height * (state.artworkY / 100) +
-        offsetX * Math.sin(radians) +
-        offsetY * Math.cos(radians),
-      width: (bounds.right - bounds.left) * scale,
-      height: (bounds.bottom - bounds.top) * scale,
-      angle: state.artworkRotation,
-      label:
-        "文字 · " +
-        Math.round(state.artworkScale) +
-        "% · " +
-        Math.round(state.artworkRotation) +
-        "°"
-    };
+    return textLayerGeometry(
+      layer,
+      result.textLayouts && result.textLayouts[layer.id],
+      width,
+      height
+    );
   }
 
   function pointHitsCanvasObject(x, y, geometry, padding) {
@@ -1731,6 +1954,10 @@
       "rotate(" + geometry.angle + "deg)";
     elements.canvasSelectionLabel.style.transform =
       "rotate(" + -geometry.angle + "deg)";
+    if (elements.canvasSelectionDeleteButton) {
+      elements.canvasSelectionDeleteButton.style.transform =
+        "rotate(" + -geometry.angle + "deg)";
+    }
     elements.canvasSelectionLabel.textContent = geometry.label;
     elements.canvasSelection.setAttribute("aria-label", geometry.label);
   }
@@ -1740,39 +1967,34 @@
       return;
     }
     readStateFromControls();
-    if (activeDragTarget === "overlay" && state.overlayLocked) {
+    var layer = getLayer(activeDragTarget) || getActiveLayer();
+    if (!layer || layer.locked) {
       return;
     }
-    if (
-      activeDragTarget === "overlay" &&
-      !imageForLayer(getActiveLayer())
-    ) {
-      setDragTarget("artwork");
+    var geometry = canvasObjectGeometry(layer.id, lastPreviewResult);
+    if (!geometry || !lastPreviewResult) {
+      return;
     }
 
     var rect = elements.canvas.getBoundingClientRect();
-    var x = activeDragTarget === "overlay" ? state.overlayX : state.artworkX;
-    var y = activeDragTarget === "overlay" ? state.overlayY : state.artworkY;
-    var centerX = rect.left + rect.width * (x / 100);
-    var centerY = rect.top + rect.height * (y / 100);
+    var centerX =
+      rect.left + (geometry.centerX / lastPreviewResult.width) * rect.width;
+    var centerY =
+      rect.top + (geometry.centerY / lastPreviewResult.height) * rect.height;
     var deltaX = event.clientX - centerX;
     var deltaY = event.clientY - centerY;
 
     canvasHandleDrag = {
       mode: mode,
-      target: activeDragTarget,
+      target: layer.id,
       pointerId: event.pointerId,
       element: event.currentTarget,
       centerX: centerX,
       centerY: centerY,
       startDistance: Math.max(1, Math.hypot(deltaX, deltaY)),
       startAngle: Math.atan2(deltaY, deltaX),
-      startScale:
-        activeDragTarget === "overlay" ? state.overlayScale : state.artworkScale,
-      startRotation:
-        activeDragTarget === "overlay"
-          ? state.overlayRotation
-          : state.artworkRotation
+      startScale: layer.scale,
+      startRotation: layer.rotation
     };
 
     elements.canvasFrame.classList.add("manipulating");
@@ -1790,10 +2012,15 @@
     var deltaX = event.clientX - canvasHandleDrag.centerX;
     var deltaY = event.clientY - canvasHandleDrag.centerY;
 
+    var layer = getLayer(canvasHandleDrag.target);
+    if (!layer || layer.locked) {
+      return;
+    }
+
     if (canvasHandleDrag.mode === "scale") {
       var distance = Math.max(1, Math.hypot(deltaX, deltaY));
-      var min = canvasHandleDrag.target === "overlay" ? 5 : 40;
-      var max = canvasHandleDrag.target === "overlay" ? 200 : 180;
+      var min = isImageLayer(layer) ? 5 : 20;
+      var max = isImageLayer(layer) ? 200 : 220;
       var scale = clamp(
         Math.round(
           canvasHandleDrag.startScale *
@@ -1802,7 +2029,8 @@
         min,
         max
       );
-      if (canvasHandleDrag.target === "overlay") {
+      layer.scale = scale;
+      if (isImageLayer(layer)) {
         state.overlayScale = scale;
         elements.overlayScale.value = scale;
         updateRange(elements.overlayScale, elements.overlayScaleValue, "%");
@@ -1825,7 +2053,8 @@
       rotation = event.shiftKey
         ? Math.round(rotation / 15) * 15
         : Math.round(rotation);
-      if (canvasHandleDrag.target === "overlay") {
+      layer.rotation = rotation;
+      if (isImageLayer(layer)) {
         state.overlayRotation = rotation;
         elements.overlayRotation.value = rotation;
         updateRange(
@@ -1870,7 +2099,8 @@
     if (!canvasDragStart) {
       return;
     }
-    if (canvasDragStart.target === "overlay" && state.overlayLocked) {
+    var layer = getLayer(canvasDragStart.target);
+    if (!layer || layer.locked) {
       return;
     }
     var rect = elements.canvas.getBoundingClientRect();
@@ -1890,7 +2120,9 @@
     x = Math.round(x * 10) / 10;
     y = Math.round(y * 10) / 10;
 
-    if (canvasDragStart.target === "overlay") {
+    layer.x = x;
+    layer.y = y;
+    if (isImageLayer(layer)) {
       state.overlayX = x;
       state.overlayY = y;
       elements.overlayX.value = state.overlayX;
@@ -1957,6 +2189,210 @@
       alpha +
       ")"
     );
+  }
+
+  function normalizeHexColor(value) {
+    var clean = String(value || "").trim().replace(/^#/, "");
+    if (/^[0-9a-f]{3}$/i.test(clean)) {
+      clean = clean
+        .split("")
+        .map(function (character) {
+          return character + character;
+        })
+        .join("");
+    }
+    return /^[0-9a-f]{6}$/i.test(clean) ? "#" + clean.toLowerCase() : null;
+  }
+
+  function rgbToHsl(rgb) {
+    var r = rgb.r / 255;
+    var g = rgb.g / 255;
+    var b = rgb.b / 255;
+    var max = Math.max(r, g, b);
+    var min = Math.min(r, g, b);
+    var lightness = (max + min) / 2;
+    var saturation = 0;
+    var hue = 0;
+
+    if (max !== min) {
+      var delta = max - min;
+      saturation =
+        lightness > 0.5
+          ? delta / (2 - max - min)
+          : delta / (max + min);
+      if (max === r) {
+        hue = (g - b) / delta + (g < b ? 6 : 0);
+      } else if (max === g) {
+        hue = (b - r) / delta + 2;
+      } else {
+        hue = (r - g) / delta + 4;
+      }
+      hue /= 6;
+    }
+
+    return {
+      h: Math.round(hue * 360),
+      s: Math.round(saturation * 100),
+      l: Math.round(lightness * 100)
+    };
+  }
+
+  function hslToRgb(hsl) {
+    var hue = (((Number(hsl.h) || 0) % 360) + 360) % 360 / 360;
+    var saturation = clamp(Number(hsl.s) || 0, 0, 100) / 100;
+    var lightness = clamp(Number(hsl.l) || 0, 0, 100) / 100;
+
+    if (saturation === 0) {
+      var gray = lightness * 255;
+      return { r: gray, g: gray, b: gray };
+    }
+
+    function hueChannel(p, q, value) {
+      if (value < 0) {
+        value += 1;
+      }
+      if (value > 1) {
+        value -= 1;
+      }
+      if (value < 1 / 6) {
+        return p + (q - p) * 6 * value;
+      }
+      if (value < 1 / 2) {
+        return q;
+      }
+      if (value < 2 / 3) {
+        return p + (q - p) * (2 / 3 - value) * 6;
+      }
+      return p;
+    }
+
+    var q =
+      lightness < 0.5
+        ? lightness * (1 + saturation)
+        : lightness + saturation - lightness * saturation;
+    var p = 2 * lightness - q;
+    return {
+      r: hueChannel(p, q, hue + 1 / 3) * 255,
+      g: hueChannel(p, q, hue) * 255,
+      b: hueChannel(p, q, hue - 1 / 3) * 255
+    };
+  }
+
+  function colorTargetLabel(target) {
+    return {
+      primaryColor: "主色",
+      accentColor: "点缀色",
+      skyColor: "辅色",
+      titleShadowColor: "标题阴影"
+    }[target] || "颜色";
+  }
+
+  function setColorValue(target, value, render) {
+    var normalized = normalizeHexColor(value);
+    if (!normalized || !elements[target]) {
+      return false;
+    }
+    state[target] = normalized;
+    elements[target].value = normalized;
+    updateColorInterface();
+    if (render !== false) {
+      scheduleRender();
+    }
+    return true;
+  }
+
+  function setActiveColorTarget(target, focusButton) {
+    if (!elements[target]) {
+      return;
+    }
+    activeColorTarget = target;
+    updateColorInterface();
+    if (focusButton) {
+      var button = Array.from(elements.colorTargetButtons).find(function (item) {
+        return item.dataset.colorTarget === target;
+      });
+      if (button) {
+        button.focus();
+      }
+    }
+  }
+
+  function updateColorInterface() {
+    if (!elements.colorTargetButtons || !elements.colorHexInput) {
+      return;
+    }
+    elements.colorTargetButtons.forEach(function (button) {
+      var target = button.dataset.colorTarget;
+      var color = normalizeHexColor(elements[target].value) || "#000000";
+      var active = target === activeColorTarget;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.tabIndex = active ? 0 : -1;
+      var swatch = button.querySelector("[data-color-swatch]");
+      if (swatch) {
+        swatch.style.backgroundColor = color;
+      }
+      var output = elements[target + "Value"];
+      if (output) {
+        output.textContent = color.toUpperCase();
+      }
+    });
+
+    var activeColor =
+      normalizeHexColor(elements[activeColorTarget].value) || "#000000";
+    var hsl = rgbToHsl(hexToRgb(activeColor));
+    elements.colorEditorTargetLabel.textContent = colorTargetLabel(
+      activeColorTarget
+    );
+    elements.colorEditorPreview.style.backgroundColor = activeColor;
+    elements.colorHexInput.value = activeColor.toUpperCase();
+    elements.colorHue.value = hsl.h;
+    elements.colorSaturation.value = hsl.s;
+    elements.colorLightness.value = hsl.l;
+    updateRange(elements.colorHue, elements.colorHueValue, "°");
+    updateRange(
+      elements.colorSaturation,
+      elements.colorSaturationValue,
+      "%"
+    );
+    updateRange(elements.colorLightness, elements.colorLightnessValue, "%");
+    elements.colorSaturation.style.background =
+      "linear-gradient(90deg, hsl(" +
+      hsl.h +
+      ", 0%, " +
+      hsl.l +
+      "%), hsl(" +
+      hsl.h +
+      ", 100%, " +
+      hsl.l +
+      "%))";
+    elements.colorLightness.style.background =
+      "linear-gradient(90deg, #000, hsl(" +
+      hsl.h +
+      ", " +
+      hsl.s +
+      "%, 50%), #fff)";
+
+    elements.colorPresetButtons.forEach(function (button) {
+      button.style.backgroundColor = button.dataset.colorPreset;
+    });
+    elements.palettePresetButtons.forEach(function (button) {
+      var colors = button.dataset.palette.split(",");
+      button.querySelectorAll("b").forEach(function (swatch, index) {
+        swatch.style.backgroundColor = colors[index] || "transparent";
+      });
+    });
+  }
+
+  function updateColorFromHslControls() {
+    var color = rgbToHex(
+      hslToRgb({
+        h: Number(elements.colorHue.value),
+        s: Number(elements.colorSaturation.value),
+        l: Number(elements.colorLightness.value)
+      })
+    );
+    setColorValue(activeColorTarget, color);
   }
 
   function isHan(character) {
@@ -2995,17 +3431,128 @@
     );
   }
 
+  function textLayoutBounds(layout, kind, width, height) {
+    var base = Math.min(width, height);
+    var paddingX = base * (kind === "subtitle" ? 0.024 : 0.04);
+    var paddingY = base * (kind === "subtitle" ? 0.022 : 0.035);
+    return {
+      left: layout.left - paddingX,
+      right: layout.right + paddingX,
+      top: layout.top - paddingY,
+      bottom: layout.bottom + paddingY
+    };
+  }
+
+  function geometryAxisAlignedRect(geometry, padding) {
+    var radians = (geometry.angle * Math.PI) / 180;
+    var halfWidth =
+      (Math.abs(Math.cos(radians)) * geometry.width +
+        Math.abs(Math.sin(radians)) * geometry.height) /
+      2;
+    var halfHeight =
+      (Math.abs(Math.sin(radians)) * geometry.width +
+        Math.abs(Math.cos(radians)) * geometry.height) /
+      2;
+    return {
+      left: geometry.centerX - halfWidth - padding,
+      right: geometry.centerX + halfWidth + padding,
+      top: geometry.centerY - halfHeight - padding,
+      bottom: geometry.centerY + halfHeight + padding
+    };
+  }
+
+  function drawIndependentTextLayer(
+    ctx,
+    width,
+    height,
+    layer,
+    entry,
+    activeTemplate,
+    pixelScale,
+    anchorTitleLayerId
+  ) {
+    if (!entry) {
+      return;
+    }
+    ctx.save();
+    applyTextLayerTransform(ctx, width, height, layer, entry);
+
+    if (entry.kind === "subtitle") {
+      drawSubtitle(ctx, entry.layout, 0);
+      if (state.density > 10) {
+        drawSubtitleFlourish(
+          ctx,
+          entry.layout,
+          0,
+          width,
+          entry.seed
+        );
+      }
+      ctx.restore();
+      return;
+    }
+
+    var usesAttachedGrammar = Boolean(
+      activeTemplate &&
+        activeTemplate.attachments &&
+        activeTemplate.attachments.enabled
+    );
+    if (
+      layer.id === anchorTitleLayerId &&
+      state.density > 18 &&
+      !usesAttachedGrammar
+    ) {
+      var line = entry.layout;
+      var curlSize = Math.min(line.fontSize * 0.45, width * 0.055);
+      var curlY = line.y + line.fontSize * 0.22;
+      var color = mixColor(state.primaryColor, "#00101d", 0.08);
+      drawSideCurl(
+        ctx,
+        line.left - curlSize * 0.26,
+        curlY,
+        curlSize,
+        1,
+        color
+      );
+      drawSideCurl(
+        ctx,
+        line.right + curlSize * 0.26,
+        curlY,
+        curlSize,
+        -1,
+        color
+      );
+      if (state.density > 42) {
+        drawUnderlineSwash(ctx, line, 0, color);
+      }
+    }
+
+    if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
+      drawGlyphLine(ctx, entry.layout, 0, {
+        shadowPass: true,
+        pixelScale: pixelScale
+      });
+    }
+    drawGlyphLine(ctx, entry.layout, 0);
+    drawAttachedGlyphGrammar(
+      ctx,
+      entry.layout,
+      0,
+      layer.lineIndex,
+      entry.seed
+    );
+    ctx.restore();
+  }
+
   function renderArtwork(canvas, scale, options) {
     var dimensions = dimensionsFromValue(state.canvasSize);
     var width = dimensions.width;
     var height = dimensions.height;
     var pixelScale = scale || 1;
-    var renderTime = options && options.time != null
-      ? options.time
-      : performance.now();
-    var forcedLayerImages = options && options.layerImages
-      ? options.layerImages
-      : null;
+    var renderTime =
+      options && options.time != null ? options.time : performance.now();
+    var forcedLayerImages =
+      options && options.layerImages ? options.layerImages : null;
 
     canvas.width = Math.round(width * pixelScale);
     canvas.height = Math.round(height * pixelScale);
@@ -3026,114 +3573,75 @@
     var line1Text = state.line1.trim();
     var line2Text = state.line2.trim();
     var subtitleText = state.subtitle.trim();
+    var referenceRatio = width / height >= 1.98;
     var activeTemplate = styleEngine
       ? styleEngine.getTemplate(state.fontStyle)
       : null;
     var runtimeAtlasMode = Boolean(
       activeTemplate && activeTemplate.atlasEnabled
     );
-    var activeTitleCount = (line1Text ? 1 : 0) + (line2Text ? 1 : 0);
-    var centerX = width / 2;
     var combinedSeed =
       (state.seed +
         hashString(line1Text + "|" + line2Text + "|" + subtitleText)) >>>
       0;
-    var titleLines = [];
-    var referenceRatio = width / height >= 1.98;
+    var textLayouts = Object.create(null);
 
-    if (activeTitleCount === 2) {
-      var firstLineY =
-        height *
-        (subtitleText
-          ? referenceRatio
-            ? 0.36
-            : 0.33
-          : referenceRatio
-            ? 0.42
-            : 0.38);
-      var secondLineY =
-        height *
-        (subtitleText
-          ? referenceRatio
-            ? 0.69
-            : 0.63
-          : referenceRatio
-            ? 0.73
-            : 0.67);
-      var lineMidpoint = (firstLineY + secondLineY) / 2;
-      var naturalLineGap = secondLineY - firstLineY;
-      // Tall imported canvases should add whitespace around the lettering,
-      // not stretch the two title lines away from each other.
-      var responsiveLineGap = Math.min(naturalLineGap, width * 0.18);
-      var scaledHalfGap =
-        (responsiveLineGap / 2) *
-        clamp(state.lineGap / 100, 0.2, 1.5);
-      firstLineY = lineMidpoint - scaledHalfGap;
-      secondLineY = lineMidpoint + scaledHalfGap;
-
-      titleLines.push(
-        prepareGlyphLine(
-          ctx,
-          line1Text,
-          firstLineY,
-          width * 0.82,
-          Math.min(
-            height * (referenceRatio ? 0.32 : 0.235),
-            width * (referenceRatio ? 0.22 : 0.17)
-          ),
-          {
-            style: state.fontStyle,
-            irregularity: state.irregularity,
-            seed: combinedSeed ^ 0x119abc,
-            lineIndex: 0,
-            atlasMode: runtimeAtlasMode
-          }
-        )
+    if (line1Text) {
+      var line1Seed = (state.seed + hashString(line1Text)) ^ 0x119abc;
+      var line1Layout = prepareGlyphLine(
+        ctx,
+        line1Text,
+        0,
+        width * 0.82,
+        Math.min(
+          height * (referenceRatio ? 0.32 : 0.235),
+          width * (referenceRatio ? 0.22 : 0.17)
+        ),
+        {
+          style: state.fontStyle,
+          irregularity: state.irregularity,
+          seed: line1Seed,
+          lineIndex: 0,
+          atlasMode: runtimeAtlasMode
+        }
       );
-      titleLines.push(
-        prepareGlyphLine(
-          ctx,
-          line2Text,
-          secondLineY,
-          width * 0.7,
-          Math.min(
-            height * (referenceRatio ? 0.37 : 0.285),
-            width * (referenceRatio ? 0.23 : 0.205)
-          ),
-          {
-            style: state.fontStyle,
-            irregularity: state.irregularity,
-            seed: combinedSeed ^ 0x7a013f,
-            lineIndex: 1,
-            atlasMode: runtimeAtlasMode
-          }
-        )
-      );
-    } else {
-      var onlyText = line1Text || line2Text;
-      if (onlyText) {
-        titleLines.push(
-          prepareGlyphLine(
-            ctx,
-            onlyText,
-            height * (subtitleText ? 0.5 : 0.55),
-            width * 0.82,
-            Math.min(height * 0.32, width * 0.22),
-            {
-              style: state.fontStyle,
-              irregularity: state.irregularity,
-              seed: combinedSeed ^ 0x29fcd1,
-              lineIndex: 0,
-              atlasMode: runtimeAtlasMode
-            }
-          )
-        );
-      }
+      textLayouts["text-line-1"] = {
+        kind: "title",
+        layout: line1Layout,
+        bounds: textLayoutBounds(line1Layout, "title", width, height),
+        seed: line1Seed
+      };
     }
 
-    var subtitle = null;
+    if (line2Text) {
+      var line2Seed = (state.seed + hashString(line2Text)) ^ 0x7a013f;
+      var line2Layout = prepareGlyphLine(
+        ctx,
+        line2Text,
+        0,
+        width * 0.7,
+        Math.min(
+          height * (referenceRatio ? 0.37 : 0.285),
+          width * (referenceRatio ? 0.23 : 0.205)
+        ),
+        {
+          style: state.fontStyle,
+          irregularity: state.irregularity,
+          seed: line2Seed,
+          lineIndex: 1,
+          atlasMode: runtimeAtlasMode
+        }
+      );
+      textLayouts["text-line-2"] = {
+        kind: "title",
+        layout: line2Layout,
+        bounds: textLayoutBounds(line2Layout, "title", width, height),
+        seed: line2Seed
+      };
+    }
+
     if (subtitleText) {
-      subtitle = prepareSubtitle(
+      var subtitleLayout = prepareSubtitle(
         ctx,
         subtitleText,
         0,
@@ -3143,168 +3651,124 @@
           width * 0.063
         )
       );
-
-      if (titleLines.length) {
-        var titleBottom = titleLines.reduce(function (lowest, line) {
-          return Math.max(lowest, line.bottom);
-        }, 0);
-        var subtitleGapUnit = Math.min(width, height);
-        // Base subtitle spacing on the short edge so changing canvas ratio
-        // does not silently make the gap much larger.
-        var subtitleGapScale = clamp(state.subtitleGap / 100, 0, 2);
-        var minimumSubtitleGap = -subtitleGapUnit * 0.03;
-        var subtitleGapStep = subtitleGapUnit * 0.04;
-        var effectiveSubtitleGap =
-          minimumSubtitleGap + subtitleGapStep * subtitleGapScale;
-        var defaultSubtitleGap = minimumSubtitleGap + subtitleGapStep;
-        var titleShift =
-          -(effectiveSubtitleGap - defaultSubtitleGap) / 2;
-        titleLines.forEach(function (line) {
-          line.y += titleShift;
-          line.top += titleShift;
-          line.bottom += titleShift;
-        });
-        var subtitleTop =
-          titleBottom + titleShift + effectiveSubtitleGap;
-        subtitle.y = subtitleTop + subtitle.fontSize * 1.05;
-      } else {
-        subtitle.y = height * 0.56;
-      }
-
-      subtitle.top = subtitle.y - subtitle.fontSize * 1.05;
-      subtitle.bottom = subtitle.y + subtitle.fontSize * 0.48;
+      textLayouts["text-subtitle"] = {
+        kind: "subtitle",
+        layout: subtitleLayout,
+        bounds: textLayoutBounds(subtitleLayout, "subtitle", width, height),
+        seed: (state.seed + hashString(subtitleText)) ^ 0x51e1d5
+      };
     }
 
-    var artworkBounds = measureArtworkBounds(
-      titleLines,
-      subtitle,
-      width,
-      height
-    );
-
-    var exclusionRects = titleLines.map(function (line) {
-      return globalRect(line, centerX, Math.min(width, height) * 0.014);
+    var visibleTextLayers = layers.filter(function (layer) {
+      return isTextLayer(layer) && layer.visible && textLayouts[layer.id];
     });
-    if (subtitle) {
-      exclusionRects.push(
-        globalRect(subtitle, centerX, Math.min(width, height) * 0.01)
+    var exclusionRects = visibleTextLayers.map(function (layer) {
+      return geometryAxisAlignedRect(
+        textLayerGeometry(layer, textLayouts[layer.id], width, height),
+        Math.min(width, height) * 0.012
       );
+    });
+    var anchorTitleLayer = getLayer("text-line-2");
+    if (
+      !anchorTitleLayer ||
+      !anchorTitleLayer.visible ||
+      !textLayouts[anchorTitleLayer.id]
+    ) {
+      anchorTitleLayer = getLayer("text-line-1");
+    }
+    var anchorTitleLayerId = anchorTitleLayer ? anchorTitleLayer.id : "";
+
+    var decorationIndex = layers.findIndex(isTextLayer);
+    if (decorationIndex < 0) {
+      decorationIndex = 0;
     }
 
-    var artworkLayerIndex = layers.findIndex(function (layer) {
-      return layer.type === "artwork";
-    });
-    var artworkLayer = getLayer("artwork");
-    drawLayerRange(
-      ctx,
-      width,
-      height,
-      0,
-      artworkLayerIndex < 0 ? layers.length : artworkLayerIndex,
-      renderTime,
-      forcedLayerImages
-    );
-
-    if (artworkLayer && artworkLayer.visible) {
-      ctx.save();
-      applyArtworkTransform(ctx, width, height);
-
-      drawReferenceClusters(ctx, width, height, combinedSeed);
-      drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
-      drawLowerConfetti(
-        ctx,
-        width,
-        height,
-        combinedSeed,
-        exclusionRects
-      );
-
-      var usesAttachedGrammar = Boolean(
-        activeTemplate &&
-          activeTemplate.attachments &&
-          activeTemplate.attachments.enabled
-      );
-
-      if (state.density > 18 && titleLines.length && !usesAttachedGrammar) {
-        var anchorLine = titleLines[titleLines.length - 1];
-        var curlSize = Math.min(anchorLine.fontSize * 0.45, width * 0.055);
-        var curlY = anchorLine.y + anchorLine.fontSize * 0.22;
-        var leftCurlX = centerX + anchorLine.left - curlSize * 0.26;
-        var rightCurlX = centerX + anchorLine.right + curlSize * 0.26;
-        if (leftCurlX - curlSize > width * 0.02) {
-          drawSideCurl(
-            ctx,
-            leftCurlX,
-            curlY,
-            curlSize,
-            1,
-            mixColor(state.primaryColor, "#00101d", 0.08)
-          );
-        }
-        if (rightCurlX + curlSize < width * 0.98) {
-          drawSideCurl(
-            ctx,
-            rightCurlX,
-            curlY,
-            curlSize,
-            -1,
-            mixColor(state.primaryColor, "#00101d", 0.08)
-          );
-        }
-        if (state.density > 42) {
-          drawUnderlineSwash(
-            ctx,
-            anchorLine,
-            centerX,
-            mixColor(state.primaryColor, "#00101d", 0.08)
-          );
-        }
+    function drawCompositionLayer(layer) {
+      if (!layer.visible) {
+        return;
       }
-
-      if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
-        titleLines.forEach(function (line) {
-          drawGlyphLine(ctx, line, centerX, {
-            shadowPass: true,
-            pixelScale: pixelScale
-          });
-        });
+      if (isImageLayer(layer)) {
+        drawOverlayImage(
+          ctx,
+          width,
+          height,
+          imageForLayer(layer, renderTime, forcedLayerImages),
+          layer
+        );
+      } else if (isTextLayer(layer)) {
+        drawIndependentTextLayer(
+          ctx,
+          width,
+          height,
+          layer,
+          textLayouts[layer.id],
+          activeTemplate,
+          pixelScale,
+          anchorTitleLayerId
+        );
       }
+    }
 
-      titleLines.forEach(function (line, index) {
-        drawGlyphLine(ctx, line, centerX);
-        drawAttachedGlyphGrammar(ctx, line, centerX, index, combinedSeed);
+    layers.slice(0, decorationIndex).forEach(drawCompositionLayer);
+    drawReferenceClusters(ctx, width, height, combinedSeed);
+    drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
+    drawLowerConfetti(ctx, width, height, combinedSeed, exclusionRects);
+    layers.slice(decorationIndex).forEach(drawCompositionLayer);
+
+    var activeTitleLayouts = visibleTextLayers
+      .filter(function (layer) {
+        return layer.textKey !== "subtitle";
+      })
+      .map(function (layer) {
+        return textLayouts[layer.id].layout;
       });
-
-      if (subtitle) {
-        drawSubtitle(ctx, subtitle, centerX);
-        if (state.density > 10) {
-          drawSubtitleFlourish(ctx, subtitle, centerX, width, combinedSeed);
+    var activeSubtitleLayer = getLayer("text-subtitle");
+    var activeSubtitle =
+      activeSubtitleLayer &&
+      activeSubtitleLayer.visible &&
+      textLayouts[activeSubtitleLayer.id]
+        ? textLayouts[activeSubtitleLayer.id].layout
+        : null;
+    var artworkBounds = exclusionRects.length
+      ? {
+          left: Math.min.apply(
+            null,
+            exclusionRects.map(function (rect) {
+              return rect.left;
+            })
+          ),
+          right: Math.max.apply(
+            null,
+            exclusionRects.map(function (rect) {
+              return rect.right;
+            })
+          ),
+          top: Math.min.apply(
+            null,
+            exclusionRects.map(function (rect) {
+              return rect.top;
+            })
+          ),
+          bottom: Math.max.apply(
+            null,
+            exclusionRects.map(function (rect) {
+              return rect.bottom;
+            })
+          )
         }
-      }
-
-      ctx.restore();
-    }
-
-    drawLayerRange(
-      ctx,
-      width,
-      height,
-      artworkLayerIndex < 0 ? layers.length : artworkLayerIndex + 1,
-      layers.length,
-      renderTime,
-      forcedLayerImages
-    );
+      : null;
 
     return {
       width: width,
       height: height,
-      lines: titleLines,
-      subtitle: subtitle,
+      lines: activeTitleLayouts,
+      subtitle: activeSubtitle,
+      textLayouts: textLayouts,
       artworkBounds: artworkBounds,
       isEmpty:
-        (!artworkLayer || !artworkLayer.visible || (!titleLines.length && !subtitle)) &&
-        !layers.some(function (layer) {
-          return layer.type !== "artwork" && layer.visible && imageForLayer(layer);
+        !visibleTextLayers.length &&
+        !getImageLayers().some(function (layer) {
+          return layer.visible && imageForLayer(layer, renderTime, forcedLayerImages);
         })
     };
   }
@@ -3315,8 +3779,6 @@
     state.subtitle = elements.subtitle.value;
     state.canvasSize = elements.canvasSize.value;
     state.density = Number(elements.density.value);
-    state.lineGap = Number(elements.lineGap.value);
-    state.subtitleGap = Number(elements.subtitleGap.value);
     state.artworkScale = Number(elements.artworkScale.value);
     state.artworkX = Number(elements.artworkX.value);
     state.artworkY = Number(elements.artworkY.value);
@@ -3394,8 +3856,6 @@
     elements.line2Count.value = graphemeCount(state.line2);
     elements.subtitleCount.value = graphemeCount(state.subtitle);
     updateRange(elements.density, elements.densityValue);
-    updateRange(elements.lineGap, elements.lineGapValue);
-    updateRange(elements.subtitleGap, elements.subtitleGapValue);
     updateRange(elements.artworkScale, elements.artworkScaleValue);
     updateRange(elements.artworkX, elements.artworkXValue);
     updateRange(elements.artworkY, elements.artworkYValue);
@@ -3414,12 +3874,8 @@
     updateOverlayInterface();
     updateBackgroundInterface();
 
-    elements.titleShadowColorValue.textContent =
-      state.titleShadowColor.toUpperCase();
     elements.titleShadowControls.disabled = !state.titleShadowEnabled;
-    elements.primaryColorValue.textContent = state.primaryColor.toUpperCase();
-    elements.accentColorValue.textContent = state.accentColor.toUpperCase();
-    elements.skyColorValue.textContent = state.skyColor.toUpperCase();
+    updateColorInterface();
     elements.canvasCornerLabel.textContent =
       dimensions.width + " × " + dimensions.height;
     elements.canvasFrame.style.setProperty(
@@ -3454,9 +3910,9 @@
     // fixed theme colors declared in CSS so light artwork palettes remain usable.
 
     var accessibleText = [
-      state.line1,
-      state.line2,
-      state.subtitle,
+      getLayer("text-line-1") ? state.line1 : "",
+      getLayer("text-line-2") ? state.line2 : "",
+      getLayer("text-subtitle") ? state.subtitle : "",
       getImageLayers()
         .filter(function (layer) {
           return layer.visible;
@@ -3530,8 +3986,6 @@
     elements.subtitle.value = state.subtitle;
     elements.canvasSize.value = state.canvasSize;
     elements.density.value = state.density;
-    elements.lineGap.value = state.lineGap;
-    elements.subtitleGap.value = state.subtitleGap;
     elements.artworkScale.value = state.artworkScale;
     elements.artworkX.value = state.artworkX;
     elements.artworkY.value = state.artworkY;
@@ -3556,6 +4010,7 @@
     updateEditorModeInterface();
     updateOverlayInterface();
     updateBackgroundInterface();
+    updateColorInterface();
   }
 
   function showToast(message) {
@@ -4286,8 +4741,6 @@
     elements.subtitle,
     elements.canvasSize,
     elements.density,
-    elements.lineGap,
-    elements.subtitleGap,
     elements.artworkScale,
     elements.artworkX,
     elements.artworkY,
@@ -4380,16 +4833,39 @@
     }
     var actionButton = event.target.closest("[data-layer-action]");
     if (actionButton) {
-      if (actionButton.dataset.layerAction === "visibility") {
+      var action = actionButton.dataset.layerAction;
+      if (action === "move-up") {
+        moveLayer(layer.id, 1);
+        event.stopPropagation();
+        return;
+      }
+      if (action === "move-down") {
+        moveLayer(layer.id, -1);
+        event.stopPropagation();
+        return;
+      }
+      if (action === "duplicate") {
+        selectLayer(layer.id, { render: false });
+        duplicateActiveLayer();
+        event.stopPropagation();
+        return;
+      }
+      if (action === "delete") {
+        removeLayer(layer.id, true);
+        event.stopPropagation();
+        return;
+      }
+      if (action === "visibility") {
         layer.visible = !layer.visible;
         if (!layer.visible && layer.id === activeLayerId) {
           hideCanvasSelection();
         }
-      } else if (actionButton.dataset.layerAction === "lock") {
+      } else if (action === "lock") {
         layer.locked = !layer.locked;
         if (layer.id === activeLayerId) {
-          state.overlayLocked = layer.type === "artwork" ? false : layer.locked;
+          state.overlayLocked = isImageLayer(layer) ? layer.locked : false;
           canvasSelectionVisible = !layer.locked;
+          updateTextTransformInterface(layer);
           updateOverlayInterface();
         }
       }
@@ -4446,23 +4922,6 @@
     clearLayerDropIndicators();
   });
 
-  elements.moveLayerUpButton.addEventListener("click", function () {
-    moveActiveLayer(1);
-  });
-  elements.moveLayerDownButton.addEventListener("click", function () {
-    moveActiveLayer(-1);
-  });
-  elements.duplicateLayerButton.addEventListener("click", duplicateActiveLayer);
-  elements.deleteLayerButton.addEventListener("click", function () {
-    removeLayer(activeLayerId, true);
-  });
-  elements.focusTextControlsButton.addEventListener("click", function () {
-    activateEditorSection("text");
-  });
-  elements.focusAssetControlsButton.addEventListener("click", function () {
-    activateEditorSection("assets");
-  });
-
   document.querySelectorAll(".canvas-ratio-option").forEach(function (button) {
     button.addEventListener("click", function () {
       setCanvasRatioMode(button.dataset.canvasMode);
@@ -4474,6 +4933,97 @@
       state.backgroundMode = button.dataset.background;
       updateBackgroundInterface();
       scheduleRender();
+    });
+  });
+
+  elements.textLayerToggleButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var layerId = button.dataset.textLayerToggle;
+      setTextLayerActive(layerId, !getLayer(layerId), true);
+    });
+  });
+
+  [
+    { input: elements.line1, layerId: "text-line-1" },
+    { input: elements.line2, layerId: "text-line-2" },
+    { input: elements.subtitle, layerId: "text-subtitle" }
+  ].forEach(function (item) {
+    item.input.addEventListener("focus", function () {
+      if (getLayer(item.layerId)) {
+        selectLayer(item.layerId, {
+          showSelection: true,
+          render: false,
+          syncEditorSection: false
+        });
+      }
+    });
+  });
+
+  elements.colorTargetButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setActiveColorTarget(button.dataset.colorTarget);
+    });
+  });
+
+  var colorTargetList = Array.from(elements.colorTargetButtons);
+  colorTargetList.forEach(function (button, index) {
+    button.addEventListener("keydown", function (event) {
+      if (["ArrowLeft", "ArrowRight", "Home", "End"].indexOf(event.key) < 0) {
+        return;
+      }
+      var nextIndex = index;
+      if (event.key === "Home") {
+        nextIndex = 0;
+      } else if (event.key === "End") {
+        nextIndex = colorTargetList.length - 1;
+      } else {
+        nextIndex += event.key === "ArrowRight" ? 1 : -1;
+        nextIndex =
+          (nextIndex + colorTargetList.length) % colorTargetList.length;
+      }
+      event.preventDefault();
+      setActiveColorTarget(
+        colorTargetList[nextIndex].dataset.colorTarget,
+        true
+      );
+    });
+  });
+
+  [elements.colorHue, elements.colorSaturation, elements.colorLightness].forEach(
+    function (control) {
+      control.addEventListener("input", updateColorFromHslControls);
+      control.addEventListener("change", updateColorFromHslControls);
+    }
+  );
+
+  elements.colorHexInput.addEventListener("input", function () {
+    var clean = String(elements.colorHexInput.value).trim();
+    if (/^#?[0-9a-f]{6}$/i.test(clean)) {
+      setColorValue(activeColorTarget, clean);
+    }
+  });
+  elements.colorHexInput.addEventListener("change", function () {
+    if (!setColorValue(activeColorTarget, elements.colorHexInput.value)) {
+      updateColorInterface();
+      showToast("请输入 3 位或 6 位 HEX 颜色");
+    }
+  });
+
+  elements.colorPresetButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      setColorValue(activeColorTarget, button.dataset.colorPreset);
+    });
+  });
+
+  elements.palettePresetButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      var palette = button.dataset.palette.split(",");
+      setColorValue("primaryColor", palette[0], false);
+      setColorValue("accentColor", palette[1], false);
+      setColorValue("skyColor", palette[2], false);
+      updateColorInterface();
+      scheduleRender();
+      showToast("整套配色已应用");
     });
   });
 
@@ -4495,30 +5045,33 @@
   });
 
   elements.resetArtworkButton.addEventListener("click", function () {
+    var layer = getActiveLayer();
     resetArtworkTransform();
     scheduleRender();
-    showToast("文字已回到中央");
+    if (isTextLayer(layer)) {
+      showToast(layer.name + "已回到默认位置");
+    }
   });
 
   elements.canvasResetButton.addEventListener("click", function () {
-    if (getActiveLayer().type !== "artwork") {
+    var layer = getActiveLayer();
+    if (!layer) {
+      return;
+    }
+    if (isImageLayer(layer)) {
       resetOverlayTransform();
       showToast("图片已回到中央");
     } else {
       resetArtworkTransform();
-      showToast("文字已回到中央");
+      showToast(layer.name + "已回到默认位置");
     }
     scheduleRender();
   });
 
-  elements.dragArtworkButton.addEventListener("click", function () {
-    selectLayer("artwork");
-  });
-
-  elements.dragOverlayButton.addEventListener("click", function () {
-    if (getActiveLayer().type !== "artwork") {
-      selectLayer(activeLayerId);
-    }
+  elements.canvasSelectionDeleteButton.addEventListener("click", function (event) {
+    event.preventDefault();
+    event.stopPropagation();
+    removeLayer(activeLayerId, true);
   });
 
   [
@@ -4540,19 +5093,11 @@
         URL.revokeObjectURL(layer.objectUrl);
       }
     });
-    layers = [
-      {
-        id: "artwork",
-        type: "artwork",
-        name: "花式文字",
-        visible: true,
-        locked: false
-      }
-    ];
-    activeLayerId = "artwork";
-    syncLayerControls(layers[0]);
+    layers = createDefaultTextLayers();
+    activeLayerId = "text-line-1";
     stopGifPreviewLoop();
     applyStateToControls();
+    syncLayerControls(getActiveLayer());
     renderLayerList();
     scheduleRender();
     showToast("已恢复初始画布");
@@ -4609,14 +5154,14 @@
       return;
     }
     canvasSelectionVisible = true;
-    setDragTarget(hitLayer.type === "artwork" ? "artwork" : "overlay");
+    setDragTarget(hitLayer.id);
     canvasDragging = true;
     canvasDragStart = {
-      target: activeDragTarget,
+      target: hitLayer.id,
       clientX: event.clientX,
       clientY: event.clientY,
-      x: activeDragTarget === "overlay" ? state.overlayX : state.artworkX,
-      y: activeDragTarget === "overlay" ? state.overlayY : state.artworkY
+      x: hitLayer.x,
+      y: hitLayer.y
     };
     elements.canvasFrame.classList.add("dragging");
     if (elements.canvas.setPointerCapture) {

@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=21" />
+    <link rel="stylesheet" href="./styles.css?v=22" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -70,7 +70,7 @@
               <small>COMPOSITION</small>
               <strong>图层</strong>
             </span>
-            <output id="layerCount">1</output>
+            <output id="layerCount">3</output>
           </div>
           <p class="layer-panel-hint">上方图层会盖住下方图层，拖动即可重新排序。</p>
           <div
@@ -79,22 +79,6 @@
             role="listbox"
             aria-label="画布图层，拖动可排序"
           ></div>
-          <div class="layer-panel-actions" aria-label="调整选中图层">
-            <button id="moveLayerUpButton" type="button" title="上移一层">↑</button>
-            <button id="moveLayerDownButton" type="button" title="下移一层">↓</button>
-            <button id="duplicateLayerButton" type="button" title="复制图层">复制</button>
-            <button id="deleteLayerButton" class="danger" type="button" title="删除图层">删除</button>
-          </div>
-          <div class="layer-panel-shortcuts">
-            <button id="focusTextControlsButton" type="button">
-              <span aria-hidden="true">T</span>
-              编辑花式文字
-            </button>
-            <button id="focusAssetControlsButton" type="button">
-              <span aria-hidden="true">＋</span>
-              添加贴纸 / 图片
-            </button>
-          </div>
         </aside>
 
         <nav class="editor-section-nav" id="editorSectionNav" aria-label="编辑功能" role="tablist">
@@ -279,30 +263,6 @@
               <input id="density" type="range" min="0" max="100" value="64" />
             </label>
 
-            <label class="range-field">
-              <span>
-                <span>两行上下间距</span>
-                <output id="lineGapValue">110%</output>
-              </span>
-              <input id="lineGap" type="range" min="20" max="150" step="5" value="110" />
-            </label>
-
-            <label class="range-field">
-              <span>
-                <span>中英上下间距</span>
-                <output id="subtitleGapValue">100%</output>
-              </span>
-              <input
-                id="subtitleGap"
-                type="range"
-                min="0"
-                max="200"
-                step="5"
-                value="100"
-                aria-label="主标题与英文小字的上下间距"
-              />
-            </label>
-
             <div class="toggle-row">
               <label class="switch-label">
                 <input id="outline" type="checkbox" checked />
@@ -317,21 +277,21 @@
 
             <details class="artwork-transform">
               <summary class="precision-summary">
-                <span>文字精确微调</span>
+                <span>选中文字图层微调</span>
                 <span class="precision-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="precision-controls">
                 <div class="transform-heading">
-                  <strong>大小与位置</strong>
+                  <strong id="selectedTextLayerName">第一行中文 · 大小与位置</strong>
                   <button id="resetArtworkButton" type="button">居中复位</button>
                 </div>
 
                 <label class="range-field compact-range">
                   <span>
-                    <span>整体大小</span>
+                    <span>当前文字大小</span>
                     <output id="artworkScaleValue">100%</output>
                   </span>
-                  <input id="artworkScale" type="range" min="40" max="180" step="2" value="100" />
+                  <input id="artworkScale" type="range" min="20" max="220" step="2" value="100" />
                 </label>
 
                 <div class="two-column artwork-position-grid">
@@ -345,9 +305,9 @@
                   <label class="range-field compact-range">
                     <span>
                       <span>上下位置</span>
-                      <output id="artworkYValue">50%</output>
+                      <output id="artworkYValue">36%</output>
                     </span>
-                    <input id="artworkY" type="range" min="0" max="100" value="50" />
+                    <input id="artworkY" type="range" min="0" max="100" value="36" />
                   </label>
                 </div>
 
@@ -374,28 +334,125 @@
               <span class="step-number">03</span>
               <h2>挑选颜色</h2>
             </div>
-            <div class="color-grid">
-              <label class="color-control">
-                <input id="primaryColor" type="color" value="#0962b5" />
+            <div class="color-target-grid" role="tablist" aria-label="选择要调整的颜色">
+              <input id="primaryColor" type="hidden" value="#0962b5" />
+              <input id="accentColor" type="hidden" value="#fcc641" />
+              <input id="skyColor" type="hidden" value="#44a5db" />
+              <input id="titleShadowColor" type="hidden" value="#4b3020" />
+              <button
+                class="color-target-button active"
+                type="button"
+                role="tab"
+                aria-selected="true"
+                data-color-target="primaryColor"
+              >
+                <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
+                <span><strong>主色</strong><small id="primaryColorValue">#0962B5</small></span>
+              </button>
+              <button
+                class="color-target-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-color-target="accentColor"
+                tabindex="-1"
+              >
+                <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
+                <span><strong>点缀</strong><small id="accentColorValue">#FCC641</small></span>
+              </button>
+              <button
+                class="color-target-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-color-target="skyColor"
+                tabindex="-1"
+              >
+                <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
+                <span><strong>辅色</strong><small id="skyColorValue">#44A5DB</small></span>
+              </button>
+              <button
+                class="color-target-button"
+                type="button"
+                role="tab"
+                aria-selected="false"
+                data-color-target="titleShadowColor"
+                tabindex="-1"
+              >
+                <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
+                <span><strong>阴影</strong><small id="titleShadowColorValue">#4B3020</small></span>
+              </button>
+            </div>
+
+            <div class="inline-color-editor" id="inlineColorEditor">
+              <div class="color-editor-topline">
                 <span>
-                  <strong>主色</strong>
-                  <small id="primaryColorValue">#0962B5</small>
+                  <small>正在调整</small>
+                  <strong id="colorEditorTargetLabel">主色</strong>
                 </span>
+                <i class="color-editor-preview" id="colorEditorPreview" aria-hidden="true"></i>
+              </div>
+
+              <label class="color-hex-field">
+                <span>HEX</span>
+                <input
+                  id="colorHexInput"
+                  type="text"
+                  value="#0962B5"
+                  maxlength="7"
+                  inputmode="text"
+                  autocomplete="off"
+                  spellcheck="false"
+                  aria-label="十六进制颜色"
+                />
               </label>
-              <label class="color-control">
-                <input id="accentColor" type="color" value="#fcc641" />
-                <span>
-                  <strong>点缀</strong>
-                  <small id="accentColorValue">#FCC641</small>
-                </span>
+
+              <label class="color-editor-range hue-range">
+                <span><span>色相 H</span><output id="colorHueValue">208°</output></span>
+                <input id="colorHue" type="range" min="0" max="360" step="1" value="208" />
               </label>
-              <label class="color-control">
-                <input id="skyColor" type="color" value="#44a5db" />
-                <span>
-                  <strong>辅色</strong>
-                  <small id="skyColorValue">#44A5DB</small>
-                </span>
+              <label class="color-editor-range saturation-range">
+                <span><span>饱和度 S</span><output id="colorSaturationValue">91%</output></span>
+                <input id="colorSaturation" type="range" min="0" max="100" step="1" value="91" />
               </label>
+              <label class="color-editor-range lightness-range">
+                <span><span>明度 L</span><output id="colorLightnessValue">37%</output></span>
+                <input id="colorLightness" type="range" min="0" max="100" step="1" value="37" />
+              </label>
+
+              <div class="quick-color-block">
+                <span>快捷色</span>
+                <div class="quick-color-row" aria-label="快捷颜色">
+                  <button type="button" data-color-preset="#0962b5" aria-label="深蓝"></button>
+                  <button type="button" data-color-preset="#44a5db" aria-label="天蓝"></button>
+                  <button type="button" data-color-preset="#06b6d4" aria-label="青色"></button>
+                  <button type="button" data-color-preset="#10b981" aria-label="薄荷绿"></button>
+                  <button type="button" data-color-preset="#84cc16" aria-label="酸橙绿"></button>
+                  <button type="button" data-color-preset="#fcc641" aria-label="明黄"></button>
+                  <button type="button" data-color-preset="#f97316" aria-label="橙色"></button>
+                  <button type="button" data-color-preset="#ef476f" aria-label="珊瑚红"></button>
+                  <button type="button" data-color-preset="#8b5cf6" aria-label="紫色"></button>
+                  <button type="button" data-color-preset="#26343a" aria-label="深灰"></button>
+                </div>
+              </div>
+
+              <div class="palette-preset-block">
+                <span>整套配色</span>
+                <div class="palette-preset-grid">
+                  <button type="button" data-palette="#0962b5,#fcc641,#44a5db">
+                    <i><b></b><b></b><b></b></i><span>活动蓝</span>
+                  </button>
+                  <button type="button" data-palette="#5b8c00,#d9f05c,#39c6b2">
+                    <i><b></b><b></b><b></b></i><span>酸橙夏日</span>
+                  </button>
+                  <button type="button" data-palette="#d94b5b,#ffc857,#6c5ce7">
+                    <i><b></b><b></b><b></b></i><span>落日汽水</span>
+                  </button>
+                  <button type="button" data-palette="#243b6b,#f0b429,#8aa4d6">
+                    <i><b></b><b></b><b></b></i><span>夜航</span>
+                  </button>
+                </div>
+              </div>
             </div>
 
             <details class="precision-disclosure title-shadow-disclosure">
@@ -414,14 +471,6 @@
                 </div>
 
                 <fieldset class="shadow-controls" id="titleShadowControls">
-                  <label class="color-control shadow-color-control">
-                    <input id="titleShadowColor" type="color" value="#4b3020" />
-                    <span>
-                      <strong>阴影颜色</strong>
-                      <small id="titleShadowColorValue">#4B3020</small>
-                    </span>
-                  </label>
-
                   <label class="range-field compact-range">
                     <span>
                       <span>不透明度</span>
@@ -494,7 +543,7 @@
             </details>
 
             <div class="custom-upload-block" id="customUploadBlock">
-              <div class="asset-divider"><span>或使用本地图片</span></div>
+              <div class="asset-divider"><span>继续叠加本地图片</span></div>
               <div class="overlay-upload-row">
                 <label class="upload-button" for="overlayFile">
                   <input
@@ -579,6 +628,23 @@
               <span class="step-number">05</span>
               <h2>导出作品</h2>
             </div>
+            <div class="background-material-control">
+              <span>画布背景</span>
+              <div class="background-switcher" role="group" aria-label="画布背景">
+                <button type="button" class="background-button active" data-background="checker" aria-pressed="true">
+                  <span class="checker-swatch" aria-hidden="true"></span>
+                  <span class="background-label">透明</span>
+                </button>
+                <button type="button" class="background-button" data-background="light" aria-pressed="false">
+                  <span class="light-swatch" aria-hidden="true"></span>
+                  <span class="background-label">浅色</span>
+                </button>
+                <button type="button" class="background-button" data-background="dark" aria-pressed="false">
+                  <span class="dark-swatch" aria-hidden="true"></span>
+                  <span class="background-label">深色</span>
+                </button>
+              </div>
+            </div>
             <div class="export-bar">
               <div class="export-copy">
                 <span class="export-icon" aria-hidden="true">↧</span>
@@ -634,27 +700,23 @@
               </div>
               <div class="canvas-object-tools" aria-label="画布内调整">
                 <span>当前</span>
-                <div class="drag-target-switch" role="group" aria-label="选择调整对象">
-                  <button id="dragArtworkButton" class="active" type="button" aria-pressed="true">花式文字</button>
-                  <button id="dragOverlayButton" type="button" aria-pressed="false" disabled>图片图层</button>
-                </div>
+                <strong id="canvasActiveObjectName">第一行中文</strong>
                 <button class="canvas-reset-button" id="canvasResetButton" type="button" title="将当前对象居中复位" aria-label="将当前对象居中复位">↺</button>
               </div>
             </div>
-            <div class="background-switcher" role="group" aria-label="画布背景">
-              <button type="button" class="background-button active" data-background="checker" aria-pressed="true">
-                <span class="checker-swatch" aria-hidden="true"></span>
-                <span class="background-label">透明</span>
-              </button>
-              <button type="button" class="background-button" data-background="light" aria-pressed="false">
-                <span class="light-swatch" aria-hidden="true"></span>
-                <span class="background-label">浅色</span>
-              </button>
-              <button type="button" class="background-button" data-background="dark" aria-pressed="false">
-                <span class="dark-swatch" aria-hidden="true"></span>
-                <span class="background-label">深色</span>
-              </button>
-            </div>
+          </div>
+
+          <div class="canvas-text-layer-switches" role="group" aria-label="启用或停用文字图层">
+            <span>文字图层</span>
+            <button class="active" type="button" data-text-layer-toggle="text-line-1" aria-pressed="true">
+              <i aria-hidden="true">1</i><span>第一行</span><b>已启用</b>
+            </button>
+            <button class="active" type="button" data-text-layer-toggle="text-line-2" aria-pressed="true">
+              <i aria-hidden="true">2</i><span>第二行</span><b>已启用</b>
+            </button>
+            <button class="active" type="button" data-text-layer-toggle="text-subtitle" aria-pressed="true">
+              <i aria-hidden="true">EN</i><span>英文</span><b>已启用</b>
+            </button>
           </div>
 
           <div class="canvas-stage" id="canvasStage">
@@ -669,6 +731,7 @@
               ></canvas>
               <div class="canvas-selection" id="canvasSelection" role="group" aria-label="当前调整对象" hidden>
                 <span class="canvas-selection-label" id="canvasSelectionLabel">文字</span>
+                <button class="canvas-selection-delete" id="canvasSelectionDeleteButton" type="button" aria-label="删除当前对象" title="删除当前对象">×</button>
                 <span class="rotation-stem" aria-hidden="true"></span>
                 <button class="canvas-handle rotation-handle" id="canvasRotationHandle" type="button" aria-label="拖动旋转当前对象">↻</button>
                 <button class="canvas-handle scale-handle" id="canvasScaleHandle" type="button" aria-label="拖动缩放当前对象">↘</button>
@@ -678,7 +741,7 @@
           </div>
 
           <div class="preview-caption">
-            <span><i class="canvas-edit-icon" aria-hidden="true">✦</i> 拖动移动 · 右上旋转 · 右下缩放</span>
+            <span><i class="canvas-edit-icon" aria-hidden="true">✦</i> 拖动移动 · 左上删除 · 右上旋转 · 右下缩放</span>
             <span id="renderStatus" role="status" aria-live="polite">画面已准备好</span>
           </div>
 
@@ -782,7 +845,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=26"></script>
+    <script src="./app.js?v=27"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

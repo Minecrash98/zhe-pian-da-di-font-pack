@@ -16,14 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link
-      rel="preload"
-      href="./assets/arknights-summer-page-bg.webp"
-      as="image"
-      type="image/webp"
-      fetchpriority="high"
-    />
-    <link rel="stylesheet" href="./styles.css?v=17" />
+    <link rel="stylesheet" href="./styles.css?v=19" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -54,7 +47,7 @@
             <img src="./assets/orange-icon.svg?v=1" alt="" />
           </span>
           <span>
-            <strong>直到大地变成一颗酸橙</strong>
+            <strong>酸橙多图层画布</strong>
           </span>
         </a>
         <div class="topbar-actions">
@@ -71,34 +64,49 @@
       </header>
 
       <main class="workspace">
-        <aside class="control-panel" aria-label="字标设置">
-          <div class="editor-mode-tabs" role="tablist" aria-label="选择制作模式">
-            <button
-              class="editor-mode-tab active"
-              id="imageModeTab"
-              type="button"
-              role="tab"
-              aria-selected="true"
-              data-editor-mode="image"
-            >
-              <span aria-hidden="true">▣</span>
-              图片制作
+        <aside class="layer-panel" aria-label="作品图层">
+          <div class="layer-panel-heading">
+            <span>
+              <small>COMPOSITION</small>
+              <strong>图层</strong>
+            </span>
+            <output id="layerCount">1</output>
+          </div>
+          <p class="layer-panel-hint">上方图层会盖住下方图层，拖动即可重新排序。</p>
+          <div
+            class="layer-list"
+            id="layerList"
+            role="listbox"
+            aria-label="画布图层，拖动可排序"
+          ></div>
+          <div class="layer-panel-actions" aria-label="调整选中图层">
+            <button id="moveLayerUpButton" type="button" title="上移一层">↑</button>
+            <button id="moveLayerDownButton" type="button" title="下移一层">↓</button>
+            <button id="duplicateLayerButton" type="button" title="复制图层">复制</button>
+            <button id="deleteLayerButton" class="danger" type="button" title="删除图层">删除</button>
+          </div>
+          <div class="layer-panel-shortcuts">
+            <button id="focusTextControlsButton" type="button">
+              <span aria-hidden="true">T</span>
+              编辑花式文字
             </button>
-            <button
-              class="editor-mode-tab"
-              id="gifModeTab"
-              type="button"
-              role="tab"
-              aria-selected="false"
-              data-editor-mode="gif"
-            >
-              <span aria-hidden="true">▶</span>
-              GIF 制作
-              <i>NEW</i>
+            <button id="focusAssetControlsButton" type="button">
+              <span aria-hidden="true">＋</span>
+              添加贴纸 / 图片
             </button>
           </div>
+        </aside>
 
-          <section class="control-section first-section">
+        <aside class="control-panel" aria-label="字标设置">
+          <div class="inspector-heading">
+            <span>
+              <small>PROPERTIES</small>
+              <strong>属性</strong>
+            </span>
+            <span id="activeLayerSummary">花式文字</span>
+          </div>
+
+          <section class="control-section first-section" id="textControlsSection">
             <div class="section-title">
               <span class="step-number">01</span>
               <h2>写下想说的话</h2>
@@ -346,10 +354,10 @@
             </details>
           </section>
 
-          <section class="control-section image-layer-section">
+          <section class="control-section image-layer-section" id="assetLibrarySection">
             <div class="section-title">
               <span class="step-number">04</span>
-              <h2 id="imageLayerTitle">加入贴纸或图片</h2>
+              <h2 id="imageLayerTitle">添加图层</h2>
               <button
                 id="overlayLockButton"
                 class="layer-lock-button"
@@ -366,17 +374,18 @@
             <details class="official-assets-disclosure" id="officialAssetsDisclosure" open>
               <summary class="precision-summary official-assets-summary">
                 <span>
-                  <strong>官方 Angelina 素材</strong>
-                  <small id="officialAssetsSummaryHint">10 张角色贴纸 · 28 个装饰</small>
+                  <strong>Angelina 素材库</strong>
+                  <small id="officialAssetsSummaryHint">贴纸、GIF 与装饰均可叠加</small>
                 </span>
                 <span class="precision-chevron" aria-hidden="true">⌄</span>
               </summary>
               <div class="official-assets-panel">
                 <div class="asset-category-tabs" id="assetCategoryTabs" role="tablist" aria-label="素材分类">
-                  <button class="active" type="button" role="tab" aria-selected="true" data-asset-category="characters">角色贴纸</button>
+                  <button class="active" type="button" role="tab" aria-selected="true" data-asset-category="characters">静态贴纸</button>
+                  <button type="button" role="tab" aria-selected="false" data-asset-category="animations">动态 GIF</button>
                   <button type="button" role="tab" aria-selected="false" data-asset-category="decorations">装饰素材</button>
                 </div>
-                <p class="official-assets-hint" id="officialAssetsHint">点一下即可加入画布，仍可拖动、缩放和旋转。</p>
+                <p class="official-assets-hint" id="officialAssetsHint">每点一次都会新建一个独立图层，可重复添加。</p>
                 <div class="official-asset-grid" id="officialAssetGrid" aria-live="polite"></div>
               </div>
             </details>
@@ -389,12 +398,13 @@
                     id="overlayFile"
                     type="file"
                     accept="image/png,image/jpeg,image/webp"
+                    multiple
                   />
                   <span aria-hidden="true">＋</span>
-                  选择图片
+                  选择图片（可多选）
                 </label>
                 <button id="removeOverlayButton" class="remove-layer-button" type="button" disabled>
-                  移除
+                  删除选中
                 </button>
               </div>
             </div>
@@ -417,13 +427,8 @@
               </summary>
               <div class="precision-controls">
                 <div class="two-column overlay-top-controls">
-                <label class="field">
-                  <span>图片位置</span>
-                  <select id="overlayLayer">
-                    <option value="foreground">盖在文字上方</option>
-                    <option value="background" selected>衬在文字下方</option>
-                  </select>
-                </label>
+                <input id="overlayLayer" type="hidden" value="foreground" />
+                <p class="layer-order-note">前后层级请在左侧图层栏拖动调整。</p>
                 <button id="resetOverlayButton" class="layer-reset-button" type="button">
                   回到中央
                 </button>
@@ -456,7 +461,7 @@
               </div>
             </details>
 
-            <p class="overlay-hint" id="overlayHint">解锁后可在画布中移动、缩放和旋转。</p>
+            <p class="overlay-hint" id="overlayHint">选择任意图片图层后，可在画布中直接移动、缩放和旋转。</p>
           </section>
 
         </aside>
@@ -482,10 +487,10 @@
                 <h2>看看成品</h2>
               </div>
               <div class="canvas-object-tools" aria-label="画布内调整">
-                <span>编辑</span>
+                <span>当前</span>
                 <div class="drag-target-switch" role="group" aria-label="选择调整对象">
-                  <button id="dragArtworkButton" class="active" type="button" aria-pressed="true">文字</button>
-                  <button id="dragOverlayButton" type="button" aria-pressed="false" disabled>图片</button>
+                  <button id="dragArtworkButton" class="active" type="button" aria-pressed="true">花式文字</button>
+                  <button id="dragOverlayButton" type="button" aria-pressed="false" disabled>图片图层</button>
                 </div>
                 <button class="canvas-reset-button" id="canvasResetButton" type="button" title="将当前对象居中复位" aria-label="将当前对象居中复位">↺</button>
               </div>
@@ -660,7 +665,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=22"></script>
+    <script src="./app.js?v=24"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

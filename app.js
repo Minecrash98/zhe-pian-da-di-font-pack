@@ -33,8 +33,7 @@
     overlayRotation: 0,
     overlayOpacity: 100,
     overlayLayer: "background",
-    overlayLocked: true,
-    editorMode: "image",
+    overlayLocked: false,
     gifQuality: "balanced",
     seed: 147
   };
@@ -45,22 +44,27 @@
   var logoFontsReady = null;
   var vectorEngineReady = null;
   var styleEngine = window.LetteringStyleEngine || null;
-  var overlayImage = null;
-  var overlayFileName = "";
-  var overlayFileBytes = 0;
-  var overlayObjectUrl = "";
-  var overlaySourceType = "";
   var selectedOfficialAsset = null;
   var officialAssetCategory = "characters";
-  var officialAssetLoadToken = 0;
   var gifPreviewTimer = 0;
-  var gifPreviewFrames = [];
-  var gifPreviewFrameIndex = 0;
   var gifFrameCache = Object.create(null);
   var angelinaAssets = window.ANGELINA_ASSETS || {
     characters: [],
     decorations: []
   };
+  var layerSequence = 0;
+  var layers = [
+    {
+      id: "artwork",
+      type: "artwork",
+      name: "花式文字",
+      visible: true,
+      locked: false
+    }
+  ];
+  var activeLayerId = "artwork";
+  var draggedLayerId = "";
+  var animationStartedAt = performance.now();
   var activeDragTarget = "artwork";
   var canvasSelectionVisible = false;
   var canvasDragging = false;
@@ -89,10 +93,22 @@
     canvasRotationHandle: document.getElementById("canvasRotationHandle"),
     canvasScaleHandle: document.getElementById("canvasScaleHandle"),
     canvasResetButton: document.getElementById("canvasResetButton"),
+    layerList: document.getElementById("layerList"),
+    layerCount: document.getElementById("layerCount"),
+    moveLayerUpButton: document.getElementById("moveLayerUpButton"),
+    moveLayerDownButton: document.getElementById("moveLayerDownButton"),
+    duplicateLayerButton: document.getElementById("duplicateLayerButton"),
+    deleteLayerButton: document.getElementById("deleteLayerButton"),
+    focusTextControlsButton: document.getElementById(
+      "focusTextControlsButton"
+    ),
+    focusAssetControlsButton: document.getElementById(
+      "focusAssetControlsButton"
+    ),
+    activeLayerSummary: document.getElementById("activeLayerSummary"),
+    textControlsSection: document.getElementById("textControlsSection"),
+    assetLibrarySection: document.getElementById("assetLibrarySection"),
     controlPanel: document.querySelector(".control-panel"),
-    editorModeTabs: document.querySelectorAll(".editor-mode-tab"),
-    imageModeTab: document.getElementById("imageModeTab"),
-    gifModeTab: document.getElementById("gifModeTab"),
     line1: document.getElementById("line1"),
     line2: document.getElementById("line2"),
     subtitle: document.getElementById("subtitle"),
@@ -364,9 +380,12 @@
   }
 
   function anchorFixedViewport(resetPanel) {
-    document.documentElement.scrollTop = 0;
-    document.body.scrollTop = 0;
-    window.scrollTo(0, 0);
+    var stackedWorkspace = window.matchMedia("(max-width: 900px)").matches;
+    if (!stackedWorkspace) {
+      document.documentElement.scrollTop = 0;
+      document.body.scrollTop = 0;
+      window.scrollTo(0, 0);
+    }
     if (resetPanel && elements.controlPanel) {
       elements.controlPanel.scrollTop = 0;
     }
@@ -379,12 +398,24 @@
     });
   }
 
+  function canvasRatioSourceImage() {
+    var active = getActiveLayer();
+    if (active && active.sourceType === "upload") {
+      return active.image;
+    }
+    var upload = layers.find(function (layer) {
+      return layer.sourceType === "upload";
+    });
+    return upload ? upload.image : null;
+  }
+
   function canvasSizeFromOverlayImage() {
-    if (!overlayImage || !overlayImage.naturalWidth || !overlayImage.naturalHeight) {
+    var sourceImage = canvasRatioSourceImage();
+    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
       return defaults.canvasSize;
     }
     var ratio = clamp(
-      overlayImage.naturalWidth / overlayImage.naturalHeight,
+      sourceImage.naturalWidth / sourceImage.naturalHeight,
       0.2,
       5
     );
@@ -404,13 +435,14 @@
     if (!elements.autoCanvasRatioShape) {
       return;
     }
-    if (!overlayImage || !overlayImage.naturalWidth || !overlayImage.naturalHeight) {
+    var sourceImage = canvasRatioSourceImage();
+    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
       elements.autoCanvasRatioShape.style.removeProperty("width");
       elements.autoCanvasRatioShape.style.removeProperty("height");
       return;
     }
     var ratio = clamp(
-      overlayImage.naturalWidth / overlayImage.naturalHeight,
+      sourceImage.naturalWidth / sourceImage.naturalHeight,
       0.28,
       3.8
     );
@@ -431,7 +463,7 @@
     if (!elements.canvasRatioPicker) {
       return;
     }
-    var hasImage = Boolean(overlayImage && overlaySourceType === "upload");
+    var hasImage = Boolean(canvasRatioSourceImage());
     elements.autoCanvasRatioButton.disabled = !hasImage;
     elements.canvasRatioPicker
       .querySelectorAll(".canvas-ratio-option")
@@ -446,7 +478,7 @@
 
   function setCanvasRatioMode(mode) {
     if (mode === "auto") {
-      if (!overlayImage) {
+      if (!canvasRatioSourceImage()) {
         return;
       }
       state.canvasRatioMode = "auto";
@@ -516,6 +548,325 @@
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
+  function nextLayerId() {
+    layerSequence += 1;
+    return "layer-" + Date.now().toString(36) + "-" + layerSequence.toString(36);
+  }
+
+  function getLayer(layerId) {
+    return layers.find(function (layer) {
+      return layer.id === layerId;
+    }) || null;
+  }
+
+  function getActiveLayer() {
+    return getLayer(activeLayerId) || layers[0];
+  }
+
+  function getImageLayers() {
+    return layers.filter(function (layer) {
+      return layer.type === "image" || layer.type === "gif";
+    });
+  }
+
+  function getAnimatedLayers() {
+    return layers.filter(function (layer) {
+      return (
+        layer.type === "gif" &&
+        layer.visible &&
+        layer.frames &&
+        layer.frames.length
+      );
+    });
+  }
+
+  function hasAnimatedLayers() {
+    return layers.some(function (layer) {
+      return layer.type === "gif" && layer.visible;
+    });
+  }
+
+  function layerTypeLabel(layer) {
+    if (layer.type === "artwork") {
+      return "花式字体与装饰";
+    }
+    if (layer.type === "gif") {
+      return "动态 GIF 图层";
+    }
+    if (layer.sourceType === "official-decoration") {
+      return "官方装饰图层";
+    }
+    if (layer.sourceType === "official-static") {
+      return "官方贴纸图层";
+    }
+    return "本地图片图层";
+  }
+
+  function imageForLayer(layer, time, forcedImages) {
+    if (!layer) {
+      return null;
+    }
+    if (forcedImages && forcedImages[layer.id]) {
+      return forcedImages[layer.id];
+    }
+    if (layer.type === "gif" && layer.frames && layer.frames.length) {
+      var elapsed = Math.max(0, Number(time) || performance.now()) - animationStartedAt;
+      var frameDelay = Math.max(20, Number(layer.frameDelay) || 200);
+      var frameIndex = Math.floor(elapsed / frameDelay) % layer.frames.length;
+      return layer.frames[frameIndex];
+    }
+    return layer.image || null;
+  }
+
+  function syncActiveLayerFromControls() {
+    var layer = getActiveLayer();
+    if (!layer || layer.type === "artwork" || !elements.overlayScale) {
+      return;
+    }
+    layer.scale = Number(elements.overlayScale.value);
+    layer.x = Number(elements.overlayX.value);
+    layer.y = Number(elements.overlayY.value);
+    layer.rotation = Number(elements.overlayRotation.value);
+    layer.opacity = Number(elements.overlayOpacity.value);
+    layer.locked = Boolean(state.overlayLocked);
+  }
+
+  function syncLayerControls(layer) {
+    if (!layer || layer.type === "artwork") {
+      selectedOfficialAsset = null;
+      state.overlayLocked = false;
+      activeDragTarget = "artwork";
+      return;
+    }
+
+    selectedOfficialAsset = layer.officialAsset || null;
+    state.overlayScale = layer.scale;
+    state.overlayX = layer.x;
+    state.overlayY = layer.y;
+    state.overlayRotation = layer.rotation;
+    state.overlayOpacity = layer.opacity;
+    state.overlayLayer = "foreground";
+    state.overlayLocked = Boolean(layer.locked);
+    activeDragTarget = "overlay";
+
+    elements.overlayScale.value = layer.scale;
+    elements.overlayX.value = layer.x;
+    elements.overlayY.value = layer.y;
+    elements.overlayRotation.value = layer.rotation;
+    elements.overlayOpacity.value = layer.opacity;
+    elements.overlayLayer.value = "foreground";
+  }
+
+  function updateLayerActionState() {
+    var layer = getActiveLayer();
+    var index = layers.indexOf(layer);
+    var isArtwork = !layer || layer.type === "artwork";
+    elements.layerCount.value = layers.length;
+    elements.moveLayerUpButton.disabled = index < 0 || index === layers.length - 1;
+    elements.moveLayerDownButton.disabled = index <= 0;
+    elements.duplicateLayerButton.disabled = isArtwork;
+    elements.deleteLayerButton.disabled = isArtwork;
+    elements.activeLayerSummary.textContent = layer ? layer.name : "未选择";
+  }
+
+  function clearLayerDropIndicators() {
+    if (!elements.layerList) {
+      return;
+    }
+    elements.layerList.querySelectorAll(".layer-item").forEach(function (item) {
+      item.classList.remove("drop-before", "drop-after", "dragging");
+    });
+  }
+
+  function reorderLayer(dragId, targetId, placeAbove) {
+    if (!dragId || dragId === targetId) {
+      return;
+    }
+    var dragged = getLayer(dragId);
+    var target = getLayer(targetId);
+    if (!dragged || !target) {
+      return;
+    }
+    var nextLayers = layers.filter(function (layer) {
+      return layer.id !== dragId;
+    });
+    var targetIndex = nextLayers.indexOf(target);
+    nextLayers.splice(targetIndex + (placeAbove ? 1 : 0), 0, dragged);
+    layers = nextLayers;
+    renderLayerList();
+    scheduleRender();
+  }
+
+  function renderLayerList() {
+    if (!elements.layerList) {
+      return;
+    }
+    var fragment = document.createDocumentFragment();
+    layers
+      .slice()
+      .reverse()
+      .forEach(function (layer) {
+        var item = document.createElement("div");
+        var handle = document.createElement("span");
+        var thumbnail = document.createElement("span");
+        var copy = document.createElement("span");
+        var name = document.createElement("strong");
+        var type = document.createElement("small");
+        var visibility = document.createElement("button");
+        var lock = document.createElement("button");
+
+        item.className = "layer-item";
+        item.dataset.layerId = layer.id;
+        item.draggable = true;
+        item.setAttribute("role", "option");
+        item.setAttribute("aria-selected", String(layer.id === activeLayerId));
+        item.classList.toggle("active", layer.id === activeLayerId);
+        item.classList.toggle("is-hidden", !layer.visible);
+
+        handle.className = "layer-drag-handle";
+        handle.textContent = "⋮⋮";
+        handle.setAttribute("aria-hidden", "true");
+
+        thumbnail.className = "layer-thumbnail";
+        if (layer.type === "artwork") {
+          thumbnail.textContent = "T";
+        } else {
+          var image = document.createElement("img");
+          image.alt = "";
+          image.src = layer.thumbnailSrc || layer.objectUrl || "";
+          thumbnail.appendChild(image);
+          if (layer.type === "gif") {
+            var badge = document.createElement("i");
+            badge.textContent = "GIF";
+            thumbnail.appendChild(badge);
+          }
+        }
+
+        copy.className = "layer-copy";
+        name.textContent = layer.name;
+        type.textContent = layerTypeLabel(layer);
+        copy.appendChild(name);
+        copy.appendChild(type);
+
+        visibility.type = "button";
+        visibility.className = "layer-inline-button";
+        visibility.dataset.layerAction = "visibility";
+        visibility.title = layer.visible ? "隐藏图层" : "显示图层";
+        visibility.setAttribute("aria-label", visibility.title);
+        visibility.textContent = layer.visible ? "◉" : "○";
+
+        lock.type = "button";
+        lock.className = "layer-inline-button";
+        lock.dataset.layerAction = "lock";
+        lock.title = layer.locked ? "解锁图层" : "锁定图层";
+        lock.setAttribute("aria-label", lock.title);
+        lock.textContent = layer.locked ? "◆" : "◇";
+
+        item.appendChild(handle);
+        item.appendChild(thumbnail);
+        item.appendChild(copy);
+        item.appendChild(visibility);
+        item.appendChild(lock);
+        fragment.appendChild(item);
+      });
+    elements.layerList.replaceChildren(fragment);
+    updateLayerActionState();
+  }
+
+  function selectLayer(layerId, options) {
+    options = options || {};
+    var layer = getLayer(layerId);
+    if (!layer) {
+      return;
+    }
+    syncActiveLayerFromControls();
+    activeLayerId = layer.id;
+    syncLayerControls(layer);
+    canvasSelectionVisible = options.showSelection !== false;
+    renderLayerList();
+    updateOverlayInterface();
+    updateDragTargetInterface();
+    updateCanvasSelection(lastPreviewResult);
+    if (options.render !== false) {
+      scheduleRender();
+    }
+  }
+
+  function addLayer(layer, options) {
+    options = options || {};
+    var artworkIndex = layers.findIndex(function (item) {
+      return item.type === "artwork";
+    });
+    if (options.belowArtwork && artworkIndex >= 0) {
+      layers.splice(artworkIndex, 0, layer);
+    } else {
+      layers.push(layer);
+    }
+    selectLayer(layer.id, { showSelection: true, render: false });
+    startGifPreviewLoop();
+    scheduleRender();
+  }
+
+  function removeLayer(layerId, notifyUser) {
+    var layer = getLayer(layerId);
+    if (!layer || layer.type === "artwork") {
+      return;
+    }
+    var index = layers.indexOf(layer);
+    layers.splice(index, 1);
+    if (
+      layer.objectUrl &&
+      !layers.some(function (item) {
+        return item.objectUrl === layer.objectUrl;
+      })
+    ) {
+      URL.revokeObjectURL(layer.objectUrl);
+    }
+    var next = layers[Math.min(index, layers.length - 1)] || layers[0];
+    activeLayerId = next.id;
+    syncLayerControls(next);
+    canvasSelectionVisible = next.type !== "artwork";
+    updateEditorModeInterface();
+    updateOverlayInterface();
+    startGifPreviewLoop();
+    scheduleRender();
+    if (notifyUser) {
+      showToast("图层已删除");
+    }
+  }
+
+  function moveActiveLayer(delta) {
+    var layer = getActiveLayer();
+    var index = layers.indexOf(layer);
+    var nextIndex = clamp(index + delta, 0, layers.length - 1);
+    if (index < 0 || index === nextIndex) {
+      return;
+    }
+    layers.splice(index, 1);
+    layers.splice(nextIndex, 0, layer);
+    renderLayerList();
+    scheduleRender();
+  }
+
+  function duplicateActiveLayer() {
+    syncActiveLayerFromControls();
+    var layer = getActiveLayer();
+    if (!layer || layer.type === "artwork") {
+      return;
+    }
+    var duplicate = Object.assign({}, layer, {
+      id: nextLayerId(),
+      name: layer.name + " 副本",
+      x: clamp(layer.x + 4, 0, 100),
+      y: clamp(layer.y + 4, 0, 100),
+      frames: layer.frames ? layer.frames.slice() : []
+    });
+    var index = layers.indexOf(layer);
+    layers.splice(index + 1, 0, duplicate);
+    selectLayer(duplicate.id);
+    showToast("图层已复制");
+  }
+
   function openLocalAssetDb() {
     if (!window.indexedDB) {
       return Promise.reject(new Error("IndexedDB is unavailable"));
@@ -541,43 +892,6 @@
       });
     }
     return localAssetDbPromise;
-  }
-
-  function writeCachedOverlay(file, name) {
-    return openLocalAssetDb().then(function (db) {
-      return new Promise(function (resolve, reject) {
-        var transaction = db.transaction("assets", "readwrite");
-        transaction.objectStore("assets").put(
-          {
-            blob: file,
-            name: name || file.name || "这张图片",
-            size: file.size || 0,
-            type: file.type || "image/png",
-            savedAt: Date.now()
-          },
-          "overlay-image"
-        );
-        transaction.oncomplete = resolve;
-        transaction.onerror = function () {
-          reject(transaction.error || new Error("Unable to cache overlay"));
-        };
-      });
-    });
-  }
-
-  function readCachedOverlay() {
-    return openLocalAssetDb().then(function (db) {
-      return new Promise(function (resolve, reject) {
-        var transaction = db.transaction("assets", "readonly");
-        var request = transaction.objectStore("assets").get("overlay-image");
-        request.onsuccess = function () {
-          resolve(request.result || null);
-        };
-        request.onerror = function () {
-          reject(request.error || new Error("Unable to read overlay cache"));
-        };
-      });
-    });
   }
 
   function deleteCachedOverlay() {
@@ -607,13 +921,19 @@
   }
 
   function updateDragTargetInterface() {
-    var artworkActive = activeDragTarget === "artwork";
+    var activeLayer = getActiveLayer();
+    var artworkActive = !activeLayer || activeLayer.type === "artwork";
     var overlayActiveAndLocked =
-      !artworkActive && Boolean(overlayImage) && state.overlayLocked;
+      !artworkActive && Boolean(activeLayer) && activeLayer.locked;
+    activeDragTarget = artworkActive ? "artwork" : "overlay";
     elements.dragArtworkButton.classList.toggle("active", artworkActive);
     elements.dragArtworkButton.setAttribute("aria-pressed", String(artworkActive));
     elements.dragOverlayButton.classList.toggle("active", !artworkActive);
     elements.dragOverlayButton.setAttribute("aria-pressed", String(!artworkActive));
+    elements.dragOverlayButton.disabled = artworkActive;
+    elements.dragOverlayButton.textContent = artworkActive
+      ? "图片图层"
+      : activeLayer.name;
     elements.canvasResetButton.disabled = overlayActiveAndLocked;
     elements.canvasFrame.classList.toggle(
       "active-overlay-locked",
@@ -631,7 +951,7 @@
 
   function setDragTarget(target) {
     activeDragTarget =
-      target === "overlay" && overlayImage && !state.overlayLocked
+      target === "overlay" && getActiveLayer().type !== "artwork"
         ? "overlay"
         : "artwork";
     updateDragTargetInterface();
@@ -639,17 +959,20 @@
   }
 
   function setOverlayLocked(locked, notifyUser) {
-    if (!overlayImage) {
+    var layer = getActiveLayer();
+    if (!layer || layer.type === "artwork") {
       return;
     }
-    state.overlayLocked = Boolean(locked);
+    layer.locked = Boolean(locked);
+    state.overlayLocked = layer.locked;
     canvasDragging = false;
     canvasDragStart = null;
     canvasHandleDrag = null;
     elements.canvasFrame.classList.remove("dragging", "manipulating");
-    hideCanvasSelection();
+    canvasSelectionVisible = !layer.locked;
     updateOverlayInterface();
-    setDragTarget(state.overlayLocked ? "artwork" : "overlay");
+    setDragTarget("overlay");
+    renderLayerList();
     scheduleRender();
     if (notifyUser) {
       showToast(state.overlayLocked ? "图片已锁定" : "图片已解锁");
@@ -670,6 +993,14 @@
       elements.overlayRotation.value = state.overlayRotation;
       elements.overlayOpacity.value = state.overlayOpacity;
       elements.overlayLayer.value = state.overlayLayer;
+    }
+    var layer = getActiveLayer();
+    if (layer && layer.type !== "artwork") {
+      layer.scale = state.overlayScale;
+      layer.x = state.overlayX;
+      layer.y = state.overlayY;
+      layer.rotation = state.overlayRotation;
+      layer.opacity = state.overlayOpacity;
     }
   }
 
@@ -715,40 +1046,33 @@
   function startGifPreviewLoop() {
     stopGifPreviewLoop();
     if (
-      state.editorMode !== "gif" ||
-      overlaySourceType !== "official-gif" ||
-      gifPreviewFrames.length < 2 ||
+      !getAnimatedLayers().length ||
       document.hidden ||
       window.matchMedia("(prefers-reduced-motion: reduce)").matches
     ) {
       return;
     }
-    var asset =
-      selectedOfficialAsset && findOfficialCharacter(selectedOfficialAsset.id);
-    var delay = asset ? asset.frameDelay : 200;
     var tick = function () {
-      gifPreviewFrameIndex =
-        (gifPreviewFrameIndex + 1) % gifPreviewFrames.length;
-      overlayImage = gifPreviewFrames[gifPreviewFrameIndex];
       scheduleRender();
-      gifPreviewTimer = window.setTimeout(tick, delay);
+      gifPreviewTimer = window.setTimeout(tick, 80);
     };
-    gifPreviewTimer = window.setTimeout(tick, delay);
+    gifPreviewTimer = window.setTimeout(tick, 80);
   }
 
   function renderOfficialAssetGrid() {
     if (!elements.officialAssetGrid) {
       return;
     }
-    var gifMode = state.editorMode === "gif";
     var assets =
-      !gifMode && officialAssetCategory === "decorations"
+      officialAssetCategory === "decorations"
         ? angelinaAssets.decorations
         : angelinaAssets.characters;
     var kind =
-      !gifMode && officialAssetCategory === "decorations"
+      officialAssetCategory === "decorations"
         ? "decoration"
-        : "character";
+        : officialAssetCategory === "animations"
+          ? "animation"
+          : "character";
     var fragment = document.createDocumentFragment();
 
     assets.forEach(function (asset) {
@@ -762,7 +1086,7 @@
       button.dataset.assetId = asset.id;
       button.setAttribute(
         "aria-label",
-        (gifMode ? "使用动态贴纸 " : "使用素材 ") + asset.name
+        "添加" + (kind === "animation" ? "动态贴纸 " : "素材 ") + asset.name
       );
       if (
         selectedOfficialAsset &&
@@ -780,13 +1104,13 @@
       image.decoding = "async";
       image.alt = "";
       image.src =
-        kind === "character"
-          ? characterThumbnailSource(asset.id)
-          : decorationAssetSource(asset.id);
+        kind === "decoration"
+          ? decorationAssetSource(asset.id)
+          : characterThumbnailSource(asset.id);
       thumb.appendChild(image);
       button.appendChild(thumb);
 
-      if (gifMode) {
+      if (kind === "animation") {
         var badge = document.createElement("i");
         badge.className = "official-asset-gif-badge";
         badge.textContent = asset.frameCount + " 帧";
@@ -803,54 +1127,40 @@
   }
 
   function updateEditorModeInterface() {
-    var gifMode = state.editorMode === "gif";
-    document.body.dataset.editorMode = state.editorMode;
-    elements.editorModeTabs.forEach(function (button) {
-      var active = button.dataset.editorMode === state.editorMode;
-      button.classList.toggle("active", active);
-      button.setAttribute("aria-selected", String(active));
-      button.setAttribute("tabindex", active ? "0" : "-1");
-    });
+    var gifMode = hasAnimatedLayers();
+    document.body.dataset.editorMode = "layers";
     elements.assetCategoryButtons.forEach(function (button) {
-      var decorations = button.dataset.assetCategory === "decorations";
-      button.hidden = gifMode && decorations;
-      var active =
-        (!gifMode && button.dataset.assetCategory === officialAssetCategory) ||
-        (gifMode && button.dataset.assetCategory === "characters");
+      var active = button.dataset.assetCategory === officialAssetCategory;
       button.classList.toggle("active", active);
       button.setAttribute("aria-selected", String(active));
     });
-    elements.customUploadBlock.hidden = gifMode;
+    elements.customUploadBlock.hidden = false;
     elements.imageQualityControl.hidden = gifMode;
     elements.gifQualityControl.hidden = !gifMode;
-    elements.imageLayerTitle.textContent = gifMode
-      ? "选择动态贴纸"
-      : "加入贴纸或图片";
-    elements.officialAssetsSummaryHint.textContent = gifMode
-      ? "10 组动态贴纸 · 每组 4–8 帧"
-      : "10 张角色贴纸 · 28 个装饰";
-    elements.officialAssetsHint.textContent = gifMode
-      ? "只载入当前选中的 GIF；导出时会按体积档位重新压缩。"
-      : "点一下即可加入画布，仍可拖动、缩放和旋转。";
-    elements.overlayHint.textContent = gifMode
-      ? "预览会动，文字与贴纸的位置仍可自由调整。"
-      : "解锁后可在画布中移动、缩放和旋转。";
+    elements.imageLayerTitle.textContent = "添加图层";
+    elements.officialAssetsSummaryHint.textContent =
+      "贴纸、GIF 与装饰均可叠加";
+    elements.officialAssetsHint.textContent =
+      "每点一次都会新建一个独立图层，可重复添加。";
+    elements.overlayHint.textContent =
+      "选择任意图片图层后，可在画布中直接移动、缩放和旋转。";
     elements.exportTitle.textContent = gifMode ? "导出动态作品" : "保存作品";
     elements.downloadButtonIcon.textContent = gifMode ? "▶" : "↓";
     elements.downloadButtonLabel.textContent = gifMode
       ? "保存 GIF"
       : "保存图片";
     renderOfficialAssetGrid();
+    renderLayerList();
   }
 
   function loadOfficialAsset(kind, id, options) {
     options = options || {};
-    var gifMode = state.editorMode === "gif";
+    var gifMode = kind === "animation";
     var asset =
       kind === "decoration"
         ? findOfficialDecoration(id)
         : findOfficialCharacter(id);
-    if (!asset || (gifMode && kind !== "character")) {
+    if (!asset) {
       showToast("这份素材暂时无法使用");
       return;
     }
@@ -861,76 +1171,59 @@
         : gifMode
           ? frameAssetSource(id, 1)
           : characterAssetSource(id);
-    var token = ++officialAssetLoadToken;
     var image = new Image();
-    gifPreviewFrames = [];
-    gifPreviewFrameIndex = 0;
     elements.officialAssetGrid.classList.add("is-loading");
     elements.officialAssetGrid.setAttribute("aria-busy", "true");
     image.decoding = "async";
     image.onload = function () {
-      if (token !== officialAssetLoadToken) {
-        return;
-      }
-      if (overlayObjectUrl) {
-        URL.revokeObjectURL(overlayObjectUrl);
-      }
-      overlayImage = image;
-      overlayFileName = asset.name;
-      overlayFileBytes = 0;
-      overlayObjectUrl = "";
-      overlaySourceType =
+      var layer = {
+        id: nextLayerId(),
+        type: gifMode ? "gif" : "image",
+        sourceType:
+          kind === "decoration"
+            ? "official-decoration"
+            : gifMode
+              ? "official-gif"
+              : "official-static",
+        name: asset.name,
+        image: image,
+        frames: gifMode ? [image] : [],
+        frameDelay: gifMode ? asset.frameDelay : 0,
+        officialAsset: { kind: kind, id: id },
+        thumbnailSrc:
+          kind === "decoration" ? source : characterThumbnailSource(id),
+        objectUrl: "",
+        bytes: 0,
+        scale: kind === "character" || gifMode ? 36 : 62,
+        x: kind === "character" || gifMode ? 78 : 50,
+        y: kind === "character" || gifMode ? 54 : 50,
+        rotation: 0,
+        opacity: 100,
+        visible: true,
+        locked: false
+      };
+      officialAssetCategory =
         kind === "decoration"
-          ? "official-decoration"
+          ? "decorations"
           : gifMode
-            ? "official-gif"
-            : "official-static";
-      selectedOfficialAsset = { kind: kind, id: id };
-      officialAssetCategory = kind === "decoration" ? "decorations" : "characters";
-      if (state.canvasRatioMode === "auto") {
-        state.canvasRatioMode = defaults.canvasRatioMode;
-        state.canvasSize = defaults.canvasSize;
-        elements.canvasSize.value = state.canvasSize;
-      }
-      if (options.resetTransform !== false) {
-        resetOverlayTransform();
-        state.overlayScale = kind === "character" ? 36 : 62;
-        state.overlayX = kind === "character" ? 78 : 50;
-        state.overlayY = kind === "character" ? 54 : 50;
-        state.overlayLayer = kind === "character" ? "foreground" : "background";
-        elements.overlayScale.value = state.overlayScale;
-        elements.overlayX.value = state.overlayX;
-        elements.overlayY.value = state.overlayY;
-        elements.overlayLayer.value = state.overlayLayer;
-      }
-      state.overlayLocked = false;
-      elements.overlayThumbnail.src =
-        kind === "character" ? characterThumbnailSource(id) : source;
-      elements.overlayFile.value = "";
+            ? "animations"
+            : "characters";
       elements.officialAssetGrid.classList.remove("is-loading");
       elements.officialAssetGrid.removeAttribute("aria-busy");
-      deleteCachedOverlay().catch(function (error) {
-        console.warn("Could not clear the replaced local image cache.", error);
-      });
+      addLayer(layer);
       updateEditorModeInterface();
-      updateOverlayInterface();
       updateCanvasRatioInterface();
-      setDragTarget("overlay");
-      scheduleRender();
       if (gifMode) {
         loadGifFrameImages(asset)
           .then(function (images) {
-            if (
-              token !== officialAssetLoadToken ||
-              state.editorMode !== "gif" ||
-              !selectedOfficialAsset ||
-              selectedOfficialAsset.id !== id
-            ) {
+            if (!getLayer(layer.id)) {
               return;
             }
-            gifPreviewFrames = images;
-            gifPreviewFrameIndex = 0;
-            overlayImage = images[0];
+            layer.frames = images;
+            layer.image = images[0];
+            if (activeLayerId === layer.id) {
+              syncLayerControls(layer);
+            }
             scheduleRender();
             startGifPreviewLoop();
           })
@@ -938,18 +1231,13 @@
             console.warn("Could not prepare the GIF preview frames.", error);
             showToast("动态预览加载失败，可刷新后重试");
           });
-      } else {
-        startGifPreviewLoop();
       }
       if (!options.silent) {
-        showToast(gifMode ? "动态贴纸已加入" : "官方素材已加入");
+        showToast(gifMode ? "动态贴纸已添加为新图层" : "素材已添加为新图层");
       }
       anchorFixedViewportAfterLayout(false);
     };
     image.onerror = function () {
-      if (token !== officialAssetLoadToken) {
-        return;
-      }
       elements.officialAssetGrid.classList.remove("is-loading");
       elements.officialAssetGrid.removeAttribute("aria-busy");
       showToast("素材加载失败，请刷新后重试");
@@ -957,84 +1245,10 @@
     image.src = source;
   }
 
-  function setEditorMode(mode, notifyUser) {
-    mode = mode === "gif" ? "gif" : "image";
-    if (state.editorMode === mode) {
-      return;
-    }
-    stopGifPreviewLoop();
-    state.editorMode = mode;
-    if (mode === "gif") {
-      officialAssetCategory = "characters";
-    }
-    updateEditorModeInterface();
-    if (selectedOfficialAsset && selectedOfficialAsset.kind === "character") {
-      loadOfficialAsset("character", selectedOfficialAsset.id, {
-        resetTransform: false,
-        silent: true
-      });
-    } else if (mode === "gif" && angelinaAssets.characters.length) {
-      loadOfficialAsset("character", angelinaAssets.characters[0].id, {
-        silent: true
-      });
-    } else {
-      scheduleRender();
-    }
-    if (notifyUser) {
-      showToast(mode === "gif" ? "已切换到 GIF 制作" : "已切换到图片制作");
-    }
-  }
-
-  function clearOverlayImage(resetTransform, preserveLocalCache) {
-    ++officialAssetLoadToken;
-    stopGifPreviewLoop();
-    if (overlayObjectUrl) {
-      URL.revokeObjectURL(overlayObjectUrl);
-    }
-    overlayImage = null;
-    overlayFileName = "";
-    overlayFileBytes = 0;
-    overlayObjectUrl = "";
-    overlaySourceType = "";
-    selectedOfficialAsset = null;
-    gifPreviewFrames = [];
-    gifPreviewFrameIndex = 0;
-    state.overlayLocked = defaults.overlayLocked;
-    if (state.canvasRatioMode === "auto") {
-      state.canvasRatioMode = defaults.canvasRatioMode;
-      state.canvasSize = defaults.canvasSize;
-      elements.canvasSize.value = state.canvasSize;
-    }
-    canvasDragging = false;
-    canvasDragStart = null;
-    canvasHandleDrag = null;
-    elements.canvasFrame.classList.remove("dragging", "manipulating");
-    hideCanvasSelection();
-    setDragTarget("artwork");
-    if (elements.overlayFile) {
-      elements.overlayFile.value = "";
-    }
-    if (elements.overlayThumbnail) {
-      elements.overlayThumbnail.removeAttribute("src");
-    }
-    if (resetTransform !== false) {
-      resetOverlayTransform();
-    }
-    if (!preserveLocalCache) {
-      deleteCachedOverlay().catch(function (error) {
-        console.warn("Could not clear the browser-local image cache.", error);
-      });
-    }
-    updateOverlayInterface();
-    renderOfficialAssetGrid();
-    updateCanvasRatioInterface();
-    anchorFixedViewportAfterLayout(false);
-  }
-
   function loadOverlayFile(file, options) {
     options = options || {};
     if (!file) {
-      return;
+      return Promise.resolve(null);
     }
     var supportedType = /^(image\/png|image\/jpeg|image\/webp)$/i.test(
       file.type || ""
@@ -1045,103 +1259,95 @@
     if (!supportedType && !supportedName) {
       showToast("请选择 PNG、JPG 或 WebP 图片");
       elements.overlayFile.value = "";
-      return;
+      return Promise.resolve(null);
     }
     if (file.size > 25 * 1024 * 1024) {
       showToast("图片不能超过 25 MB");
       elements.overlayFile.value = "";
-      return;
+      return Promise.resolve(null);
     }
 
     var objectUrl = URL.createObjectURL(file);
-    var image = new Image();
-    image.decoding = "async";
-    image.onload = function () {
-      ++officialAssetLoadToken;
-      stopGifPreviewLoop();
-      if (overlayObjectUrl) {
-        URL.revokeObjectURL(overlayObjectUrl);
-      }
-      overlayImage = image;
-      overlayFileName = options.name || file.name || "这张图片";
-      overlayFileBytes = options.size || file.size || 0;
-      overlayObjectUrl = objectUrl;
-      overlaySourceType = "upload";
-      selectedOfficialAsset = null;
-      gifPreviewFrames = [];
-      gifPreviewFrameIndex = 0;
-      state.overlayLocked = defaults.overlayLocked;
-      hideCanvasSelection();
-      state.canvasRatioMode = "auto";
-      state.canvasSize = canvasSizeFromOverlayImage();
-      elements.canvasSize.value = state.canvasSize;
-      if (options.resetTransform !== false) {
-        resetOverlayTransform();
-      }
-      elements.overlayThumbnail.src = objectUrl;
-      elements.overlayFile.value = "";
-      renderOfficialAssetGrid();
-      updateOverlayInterface();
-      updateCanvasRatioInterface();
-      if (!options.silent) {
-        setDragTarget("artwork");
-      }
-      scheduleRender();
-      if (options.persist !== false) {
-        writeCachedOverlay(file, overlayFileName).catch(function (error) {
-          console.warn("Could not cache the image in this browser.", error);
-        });
-      }
-      if (!options.silent) {
-        showToast("图片已加入");
-      }
-      anchorFixedViewportAfterLayout(false);
-    };
-    image.onerror = function () {
-      URL.revokeObjectURL(objectUrl);
-      elements.overlayFile.value = "";
-      showToast("无法读取这张图片");
-    };
-    image.src = objectUrl;
+    return new Promise(function (resolve) {
+      var image = new Image();
+      image.decoding = "async";
+      image.onload = function () {
+        var wasFirstImage = getImageLayers().length === 0;
+        var layer = {
+          id: nextLayerId(),
+          type: "image",
+          sourceType: "upload",
+          name: options.name || file.name || "这张图片",
+          image: image,
+          frames: [],
+          frameDelay: 0,
+          officialAsset: null,
+          thumbnailSrc: objectUrl,
+          objectUrl: objectUrl,
+          bytes: options.size || file.size || 0,
+          scale: 100,
+          x: 50,
+          y: 50,
+          rotation: 0,
+          opacity: 100,
+          visible: true,
+          locked: false
+        };
+        addLayer(layer, { belowArtwork: true });
+        if (wasFirstImage && options.followRatio !== false) {
+          state.canvasRatioMode = "auto";
+          state.canvasSize = canvasSizeFromOverlayImage();
+          elements.canvasSize.value = state.canvasSize;
+        }
+        elements.overlayFile.value = "";
+        updateOverlayInterface();
+        updateCanvasRatioInterface();
+        scheduleRender();
+        if (!options.silent) {
+          showToast("图片已添加为新图层");
+        }
+        anchorFixedViewportAfterLayout(false);
+        resolve(layer);
+      };
+      image.onerror = function () {
+        URL.revokeObjectURL(objectUrl);
+        elements.overlayFile.value = "";
+        showToast("无法读取这张图片");
+        resolve(null);
+      };
+      image.src = objectUrl;
+    });
   }
 
   function restoreCachedOverlay() {
-    readCachedOverlay()
-      .then(function (cached) {
-        if (!cached || !cached.blob || state.editorMode !== "image") {
-          return;
-        }
-        loadOverlayFile(cached.blob, {
-          name: cached.name,
-          size: cached.size,
-          persist: false,
-          resetTransform: false,
-          silent: true
-        });
-      })
-      .catch(function (error) {
-        console.warn("Could not restore the browser-local image cache.", error);
-      });
+    deleteCachedOverlay().catch(function (error) {
+      console.warn("Could not clear the legacy single-image cache.", error);
+    });
   }
 
   function updateOverlayInterface() {
     if (!elements.overlayControls) {
       return;
     }
-    var hasImage = Boolean(overlayImage);
-    var locked = hasImage && state.overlayLocked;
+    var layer = getActiveLayer();
+    var hasImage = Boolean(layer && layer.type !== "artwork");
+    var activeImage = hasImage ? imageForLayer(layer) : null;
+    var locked = hasImage && layer.locked;
+    if (hasImage) {
+      syncLayerControls(layer);
+    }
     elements.overlayControls.hidden = !hasImage;
     elements.overlayControls.classList.toggle("is-locked", locked);
     elements.removeOverlayButton.disabled = !hasImage;
     elements.overlayThumbnail.hidden = !hasImage;
     elements.overlayPlaceholder.hidden = hasImage;
-    elements.canvasFrame.classList.toggle("has-overlay", hasImage);
+    elements.canvasFrame.classList.toggle("has-overlay", getImageLayers().length > 0);
     elements.canvasFrame.classList.toggle("dragging", canvasDragging);
-    elements.dragOverlayButton.disabled = !hasImage || locked;
+    elements.dragOverlayButton.disabled = !hasImage;
     elements.overlayLockButton.disabled = !hasImage;
     elements.overlayLockButton.setAttribute(
       "aria-pressed",
-      String(hasImage ? state.overlayLocked : true)
+      String(hasImage ? layer.locked : true)
     );
     var lockAction = !hasImage
       ? "上传图片后可锁定"
@@ -1161,44 +1367,46 @@
     ].forEach(function (control) {
       control.disabled = locked;
     });
-    if ((!hasImage || locked) && activeDragTarget === "overlay") {
-      activeDragTarget = "artwork";
-    }
     updateDragTargetInterface();
 
     if (hasImage) {
-      elements.overlayFileName.textContent = overlayFileName;
+      elements.overlayFileName.textContent = layer.name;
+      elements.overlayThumbnail.src = layer.thumbnailSrc || layer.objectUrl || "";
       var officialCharacter =
-        selectedOfficialAsset && selectedOfficialAsset.kind === "character"
-          ? findOfficialCharacter(selectedOfficialAsset.id)
+        layer.officialAsset &&
+        (layer.officialAsset.kind === "character" ||
+          layer.officialAsset.kind === "animation")
+          ? findOfficialCharacter(layer.officialAsset.id)
           : null;
-      if (overlaySourceType === "official-gif" && officialCharacter) {
+      if (layer.type === "gif" && officialCharacter) {
         elements.overlayFileMeta.textContent =
           "动态贴纸 · " + officialCharacter.frameCount + " 帧 · 循环播放";
-      } else if (overlaySourceType === "official-decoration") {
+      } else if (layer.sourceType === "official-decoration") {
         elements.overlayFileMeta.textContent =
-          overlayImage.naturalWidth +
+          activeImage.naturalWidth +
           " × " +
-          overlayImage.naturalHeight +
+          activeImage.naturalHeight +
           " px · 官方装饰";
-      } else if (overlaySourceType === "official-static") {
+      } else if (layer.sourceType === "official-static") {
         elements.overlayFileMeta.textContent =
-          overlayImage.naturalWidth +
+          activeImage.naturalWidth +
           " × " +
-          overlayImage.naturalHeight +
+          activeImage.naturalHeight +
           " px · 官方贴纸";
       } else {
         elements.overlayFileMeta.textContent =
-          overlayImage.naturalWidth +
+          activeImage.naturalWidth +
           " × " +
-          overlayImage.naturalHeight +
+          activeImage.naturalHeight +
           " px · " +
-          formatFileSize(overlayFileBytes);
+          formatFileSize(layer.bytes || 0);
       }
     } else {
-      elements.overlayFileName.textContent = "还没有添加图片";
+      elements.overlayFileName.textContent = "当前选中：花式文字";
       elements.overlayFileMeta.textContent =
-        "PNG、JPG 或 WebP · 25 MB 以内";
+        getImageLayers().length
+          ? "在左侧选择图片图层即可调整"
+          : "可继续添加贴纸、GIF 或本地图片";
     }
 
     updateRange(elements.overlayScale, elements.overlayScaleValue, "%");
@@ -1213,21 +1421,22 @@
     updateCanvasRatioInterface();
   }
 
-  function drawOverlayImage(ctx, width, height, image) {
-    image = image || overlayImage;
+  function drawOverlayImage(ctx, width, height, image, layer) {
+    layer = layer || getActiveLayer();
+    image = image || imageForLayer(layer);
     if (!image || !image.naturalWidth || !image.naturalHeight) {
       return;
     }
-    var drawWidth = width * (state.overlayScale / 100);
+    var drawWidth = width * ((layer.scale || 100) / 100);
     var drawHeight =
       drawWidth * (image.naturalHeight / image.naturalWidth);
-    var centerX = width * (state.overlayX / 100);
-    var centerY = height * (state.overlayY / 100);
+    var centerX = width * ((layer.x == null ? 50 : layer.x) / 100);
+    var centerY = height * ((layer.y == null ? 50 : layer.y) / 100);
 
     ctx.save();
-    ctx.globalAlpha = clamp(state.overlayOpacity / 100, 0, 1);
+    ctx.globalAlpha = clamp((layer.opacity == null ? 100 : layer.opacity) / 100, 0, 1);
     ctx.translate(centerX, centerY);
-    ctx.rotate((state.overlayRotation * Math.PI) / 180);
+    ctx.rotate(((layer.rotation || 0) * Math.PI) / 180);
     ctx.drawImage(
       image,
       -drawWidth / 2,
@@ -1236,6 +1445,21 @@
       drawHeight
     );
     ctx.restore();
+  }
+
+  function drawLayerRange(ctx, width, height, start, end, time, forcedImages) {
+    layers.slice(start, end).forEach(function (layer) {
+      if (layer.type === "artwork" || !layer.visible) {
+        return;
+      }
+      drawOverlayImage(
+        ctx,
+        width,
+        height,
+        imageForLayer(layer, time, forcedImages),
+        layer
+      );
+    });
   }
 
   function artworkTransformScale(width, height) {
@@ -1266,31 +1490,41 @@
     var width = result.width;
     var height = result.height;
 
-    if (target === "overlay") {
+    if (target !== "artwork") {
+      var layer = target === "overlay" ? getActiveLayer() : getLayer(target);
+      var layerImage = imageForLayer(layer);
       if (
-        state.overlayLocked ||
-        !overlayImage ||
-        !overlayImage.naturalWidth ||
-        !overlayImage.naturalHeight
+        !layer ||
+        layer.type === "artwork" ||
+        layer.locked ||
+        !layer.visible ||
+        !layerImage ||
+        !layerImage.naturalWidth ||
+        !layerImage.naturalHeight
       ) {
         return null;
       }
-      var overlayWidth = width * (state.overlayScale / 100);
+      var overlayWidth = width * (layer.scale / 100);
       return {
-        centerX: width * (state.overlayX / 100),
-        centerY: height * (state.overlayY / 100),
+        centerX: width * (layer.x / 100),
+        centerY: height * (layer.y / 100),
         width: overlayWidth,
         height:
           overlayWidth *
-          (overlayImage.naturalHeight / overlayImage.naturalWidth),
-        angle: state.overlayRotation,
+          (layerImage.naturalHeight / layerImage.naturalWidth),
+        angle: layer.rotation,
         label:
-          "图片 · " +
-          Math.round(state.overlayScale) +
+          layer.name + " · " +
+          Math.round(layer.scale) +
           "% · " +
-          Math.round(state.overlayRotation) +
+          Math.round(layer.rotation) +
           "°"
       };
+    }
+
+    var artworkLayer = getLayer("artwork");
+    if (!artworkLayer || !artworkLayer.visible || artworkLayer.locked) {
+      return null;
     }
 
     var bounds = result.artworkBounds;
@@ -1350,9 +1584,15 @@
     var x = ((event.clientX - rect.left) / rect.width) * result.width;
     var y = ((event.clientY - rect.top) / rect.height) * result.height;
     var padding = Math.min(result.width, result.height) * 0.012;
-    var targets = activeDragTarget === "overlay"
-      ? ["overlay", "artwork"]
-      : ["artwork", "overlay"];
+    var targets = layers
+      .slice()
+      .reverse()
+      .filter(function (layer) {
+        return layer.visible && !layer.locked;
+      })
+      .map(function (layer) {
+        return layer.id;
+      });
 
     for (var i = 0; i < targets.length; i += 1) {
       var target = targets[i];
@@ -1428,7 +1668,10 @@
     if (activeDragTarget === "overlay" && state.overlayLocked) {
       return;
     }
-    if (activeDragTarget === "overlay" && !overlayImage) {
+    if (
+      activeDragTarget === "overlay" &&
+      !imageForLayer(getActiveLayer())
+    ) {
       setDragTarget("artwork");
     }
 
@@ -2401,7 +2644,7 @@
     ctx.restore();
   }
 
-  function drawAttachedGlyphGrammar(ctx, line, centerX, lineIndex) {
+  function drawAttachedGlyphGrammar(ctx, line, centerX, lineIndex, seed) {
     var template = line.template;
     if (
       !template ||
@@ -2424,6 +2667,16 @@
     var outlineColor = mixColor(state.skyColor, "#ffffff", 0.76);
     var first = anchors[0];
     var last = anchors[anchors.length - 1];
+    var attachmentSeed =
+      (typeof seed === "number" ? seed : state.seed) ^
+      Math.imul(lineIndex + 1, 0x9e3779b1) ^
+      0x68bc21eb;
+    var attachmentRandom = mulberry32(attachmentSeed >>> 0);
+    var curlDirection = attachmentRandom() < 0.5 ? -1 : 1;
+    var curlLift = 0.09 + attachmentRandom() * 0.12;
+    var curlDrift = 0.02 + attachmentRandom() * 0.1;
+    var tailLift = 0.24 + attachmentRandom() * 0.12;
+    var tailDrift = 0.02 + attachmentRandom() * 0.09;
     var firstAtlasMeta =
       first.glyph.fontKey && first.glyph.fontKey.indexOf("atlas:") === 0 && styleEngine
       ? styleEngine.getAtlasMeta(first.glyph.char, template)
@@ -2483,23 +2736,25 @@
       !(lastAtlasMeta && lastAtlasMeta.terminalCurl)
     ) {
       var curl = new Path2D();
-      var curlStartX = last.right - size * 0.15;
-      var curlY = last.baseline - size * 0.01;
+      var curlAnchor = curlDirection > 0 ? last : first;
+      var curlEdge = curlDirection > 0 ? curlAnchor.right : curlAnchor.left;
+      var curlStartX = curlEdge + curlDirection * size * curlDrift;
+      var curlY = curlAnchor.baseline - size * curlLift;
       curl.moveTo(curlStartX, curlY);
       curl.bezierCurveTo(
-        last.right + size * 0.18,
+        curlStartX + curlDirection * size * 0.33,
         curlY + size * 0.3,
-        last.right + size * 0.5,
+        curlStartX + curlDirection * size * 0.65,
         curlY + size * 0.22,
-        last.right + size * 0.43,
+        curlStartX + curlDirection * size * 0.58,
         curlY - size * 0.02
       );
       curl.bezierCurveTo(
-        last.right + size * 0.39,
+        curlStartX + curlDirection * size * 0.54,
         curlY - size * 0.18,
-        last.right + size * 0.2,
+        curlStartX + curlDirection * size * 0.35,
         curlY - size * 0.16,
-        last.right + size * 0.25,
+        curlStartX + curlDirection * size * 0.4,
         curlY - size * 0.03
       );
       strokeLetteringPath(
@@ -2513,24 +2768,27 @@
 
     if (template.attachments.underlineTail && lineIndex > 0 && anchors.length > 1) {
       var tail = new Path2D();
-      var tailStart = last.left + size * 0.18;
-      var tailY = last.baseline - size * 0.03;
+      var tailDirection = -curlDirection;
+      var tailAnchor = tailDirection > 0 ? last : first;
+      var tailEdge = tailDirection > 0 ? tailAnchor.right : tailAnchor.left;
+      var tailStart = tailEdge + tailDirection * size * tailDrift;
+      var tailY = tailAnchor.baseline - size * tailLift;
       tail.moveTo(tailStart, tailY);
       tail.bezierCurveTo(
-        last.left + size * 0.06,
-        tailY + size * 0.52,
-        last.left - size * 0.43,
-        tailY + size * 0.57,
-        last.left - size * 0.4,
-        tailY + size * 0.27
+        tailStart + tailDirection * size * 0.12,
+        tailY + size * 0.36,
+        tailStart + tailDirection * size * 0.61,
+        tailY + size * 0.4,
+        tailStart + tailDirection * size * 0.58,
+        tailY + size * 0.2
       );
       tail.bezierCurveTo(
-        last.left - size * 0.38,
+        tailStart + tailDirection * size * 0.56,
+        tailY + size * 0.06,
+        tailStart + tailDirection * size * 0.36,
         tailY + size * 0.08,
-        last.left - size * 0.18,
-        tailY + size * 0.11,
-        last.left - size * 0.25,
-        tailY + size * 0.26
+        tailStart + tailDirection * size * 0.43,
+        tailY + size * 0.18
       );
       strokeLetteringPath(
         ctx,
@@ -2667,8 +2925,12 @@
     var width = dimensions.width;
     var height = dimensions.height;
     var pixelScale = scale || 1;
-    var renderOverlayImage =
-      options && options.overlayImage ? options.overlayImage : overlayImage;
+    var renderTime = options && options.time != null
+      ? options.time
+      : performance.now();
+    var forcedLayerImages = options && options.layerImages
+      ? options.layerImages
+      : null;
 
     canvas.width = Math.round(width * pixelScale);
     canvas.height = Math.round(height * pixelScale);
@@ -2854,91 +3116,109 @@
       );
     }
 
-    if (renderOverlayImage && state.overlayLayer === "background") {
-      drawOverlayImage(ctx, width, height, renderOverlayImage);
-    }
-
-    ctx.save();
-    applyArtworkTransform(ctx, width, height);
-
-    drawReferenceClusters(ctx, width, height, combinedSeed);
-    drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
-    drawLowerConfetti(
+    var artworkLayerIndex = layers.findIndex(function (layer) {
+      return layer.type === "artwork";
+    });
+    var artworkLayer = getLayer("artwork");
+    drawLayerRange(
       ctx,
       width,
       height,
-      combinedSeed,
-      exclusionRects
+      0,
+      artworkLayerIndex < 0 ? layers.length : artworkLayerIndex,
+      renderTime,
+      forcedLayerImages
     );
 
-    var usesAttachedGrammar = Boolean(
-      activeTemplate &&
-        activeTemplate.attachments &&
-        activeTemplate.attachments.enabled
-    );
+    if (artworkLayer && artworkLayer.visible) {
+      ctx.save();
+      applyArtworkTransform(ctx, width, height);
 
-    if (state.density > 18 && titleLines.length && !usesAttachedGrammar) {
-      var anchorLine = titleLines[titleLines.length - 1];
-      var curlSize = Math.min(anchorLine.fontSize * 0.45, width * 0.055);
-      var curlY = anchorLine.y + anchorLine.fontSize * 0.22;
-      var leftCurlX = centerX + anchorLine.left - curlSize * 0.26;
-      var rightCurlX = centerX + anchorLine.right + curlSize * 0.26;
-      if (leftCurlX - curlSize > width * 0.02) {
-        drawSideCurl(
-          ctx,
-          leftCurlX,
-          curlY,
-          curlSize,
-          1,
-          mixColor(state.primaryColor, "#00101d", 0.08)
-        );
-      }
-      if (rightCurlX + curlSize < width * 0.98) {
-        drawSideCurl(
-          ctx,
-          rightCurlX,
-          curlY,
-          curlSize,
-          -1,
-          mixColor(state.primaryColor, "#00101d", 0.08)
-        );
-      }
-      if (state.density > 42) {
-        drawUnderlineSwash(
-          ctx,
-          anchorLine,
-          centerX,
-          mixColor(state.primaryColor, "#00101d", 0.08)
-        );
-      }
-    }
+      drawReferenceClusters(ctx, width, height, combinedSeed);
+      drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
+      drawLowerConfetti(
+        ctx,
+        width,
+        height,
+        combinedSeed,
+        exclusionRects
+      );
 
-    if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
-      titleLines.forEach(function (line) {
-        drawGlyphLine(ctx, line, centerX, {
-          shadowPass: true,
-          pixelScale: pixelScale
+      var usesAttachedGrammar = Boolean(
+        activeTemplate &&
+          activeTemplate.attachments &&
+          activeTemplate.attachments.enabled
+      );
+
+      if (state.density > 18 && titleLines.length && !usesAttachedGrammar) {
+        var anchorLine = titleLines[titleLines.length - 1];
+        var curlSize = Math.min(anchorLine.fontSize * 0.45, width * 0.055);
+        var curlY = anchorLine.y + anchorLine.fontSize * 0.22;
+        var leftCurlX = centerX + anchorLine.left - curlSize * 0.26;
+        var rightCurlX = centerX + anchorLine.right + curlSize * 0.26;
+        if (leftCurlX - curlSize > width * 0.02) {
+          drawSideCurl(
+            ctx,
+            leftCurlX,
+            curlY,
+            curlSize,
+            1,
+            mixColor(state.primaryColor, "#00101d", 0.08)
+          );
+        }
+        if (rightCurlX + curlSize < width * 0.98) {
+          drawSideCurl(
+            ctx,
+            rightCurlX,
+            curlY,
+            curlSize,
+            -1,
+            mixColor(state.primaryColor, "#00101d", 0.08)
+          );
+        }
+        if (state.density > 42) {
+          drawUnderlineSwash(
+            ctx,
+            anchorLine,
+            centerX,
+            mixColor(state.primaryColor, "#00101d", 0.08)
+          );
+        }
+      }
+
+      if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
+        titleLines.forEach(function (line) {
+          drawGlyphLine(ctx, line, centerX, {
+            shadowPass: true,
+            pixelScale: pixelScale
+          });
         });
-      });
-    }
-
-    titleLines.forEach(function (line, index) {
-      drawGlyphLine(ctx, line, centerX);
-      drawAttachedGlyphGrammar(ctx, line, centerX, index);
-    });
-
-    if (subtitle) {
-      drawSubtitle(ctx, subtitle, centerX);
-      if (state.density > 10) {
-        drawSubtitleFlourish(ctx, subtitle, centerX, width, combinedSeed);
       }
+
+      titleLines.forEach(function (line, index) {
+        drawGlyphLine(ctx, line, centerX);
+        drawAttachedGlyphGrammar(ctx, line, centerX, index, combinedSeed);
+      });
+
+      if (subtitle) {
+        drawSubtitle(ctx, subtitle, centerX);
+        if (state.density > 10) {
+          drawSubtitleFlourish(ctx, subtitle, centerX, width, combinedSeed);
+        }
+      }
+
+      ctx.restore();
     }
 
-    ctx.restore();
-
-    if (renderOverlayImage && state.overlayLayer === "foreground") {
-      drawOverlayImage(ctx, width, height, renderOverlayImage);
-    }
+    drawLayerRange(
+      ctx,
+      width,
+      height,
+      artworkLayerIndex < 0 ? layers.length : artworkLayerIndex + 1,
+      layers.length,
+      renderTime,
+      forcedLayerImages
+    );
 
     return {
       width: width,
@@ -2946,7 +3226,11 @@
       lines: titleLines,
       subtitle: subtitle,
       artworkBounds: artworkBounds,
-      isEmpty: !titleLines.length && !subtitle && !renderOverlayImage
+      isEmpty:
+        (!artworkLayer || !artworkLayer.visible || (!titleLines.length && !subtitle)) &&
+        !layers.some(function (layer) {
+          return layer.type !== "artwork" && layer.visible && imageForLayer(layer);
+        })
     };
   }
 
@@ -2979,6 +3263,7 @@
     state.overlayLayer = elements.overlayLayer.value;
     state.exportScale = Number(elements.exportScale.value);
     state.gifQuality = elements.gifQuality.value;
+    syncActiveLayerFromControls();
   }
 
   function gifQualitySettings(value) {
@@ -3067,18 +3352,22 @@
       dimensions.width + " / " + dimensions.height
     );
     fitCanvasFrame(dimensions);
-    if (state.editorMode === "gif") {
+    var animatedLayers = getAnimatedLayers();
+    var gifMode = hasAnimatedLayers();
+    elements.imageQualityControl.hidden = gifMode;
+    elements.gifQualityControl.hidden = !gifMode;
+    elements.exportTitle.textContent = gifMode ? "导出动态作品" : "保存作品";
+    elements.downloadButtonIcon.textContent = gifMode ? "▶" : "↓";
+    elements.downloadButtonLabel.textContent = gifMode ? "保存 GIF" : "保存图片";
+    if (gifMode) {
       var gifDimensions = gifOutputDimensions();
-      var gifAsset =
-        selectedOfficialAsset && selectedOfficialAsset.kind === "character"
-          ? findOfficialCharacter(selectedOfficialAsset.id)
-          : null;
       elements.exportDescription.textContent =
         gifDimensions.width +
         " × " +
         gifDimensions.height +
         " px · " +
-        (gifAsset ? gifAsset.frameCount + " 帧 · " : "") +
+        animatedLayers.length +
+        " 个动态图层 · " +
         gifDimensions.settings.maxColors +
         " 色";
     } else {
@@ -3093,7 +3382,14 @@
       state.line1,
       state.line2,
       state.subtitle,
-      overlayImage ? "图片 " + overlayFileName : ""
+      getImageLayers()
+        .filter(function (layer) {
+          return layer.visible;
+        })
+        .map(function (layer) {
+          return layer.name;
+        })
+        .join("、")
     ]
       .filter(function (item) {
         return item.trim();
@@ -3117,20 +3413,16 @@
       return;
     }
 
-    if (!result.lines.length && !result.subtitle && overlayImage) {
-      elements.renderStatus.textContent =
-        state.editorMode === "gif"
-          ? "动态贴纸正在循环预览"
-          : "拖动图片，放到喜欢的位置";
+    if (!result.lines.length && !result.subtitle && getImageLayers().length) {
+      elements.renderStatus.textContent = hasAnimatedLayers()
+        ? "动态图层正在循环预览"
+        : "拖动图层，放到喜欢的位置";
       return;
     }
 
-    if (state.editorMode === "gif" && overlaySourceType === "official-gif") {
-      var previewAsset =
-        selectedOfficialAsset && findOfficialCharacter(selectedOfficialAsset.id);
-      elements.renderStatus.textContent = previewAsset
-        ? "动态预览中 · " + previewAsset.frameCount + " 帧循环"
-        : "动态预览中";
+    if (hasAnimatedLayers()) {
+      elements.renderStatus.textContent =
+        "动态图层预览中 · " + layers.length + " 个图层共存";
       return;
     }
 
@@ -3142,8 +3434,8 @@
       : state.fontStyle === "playful" && styleEngine && styleEngine.isReady()
         ? "手绘效果刚刚好"
         : "画面已准备好";
-    elements.renderStatus.textContent = overlayImage
-      ? statusText + " · 图片已加入"
+    elements.renderStatus.textContent = getImageLayers().length
+      ? statusText + " · " + layers.length + " 个图层"
       : statusText;
   }
 
@@ -3238,8 +3530,7 @@
       "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
       "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
       "./assets/fonts/Kalam-Bold.ttf",
-      "./assets/fonts/PrincessSofia-Regular.ttf",
-      "./assets/arknights-summer-page-bg.webp"
+      "./assets/fonts/PrincessSofia-Regular.ttf"
     ];
 
     Array.prototype.forEach.call(
@@ -3354,9 +3645,9 @@
     } else {
       elements.downloadButton.removeAttribute("aria-busy");
       elements.downloadButtonIcon.textContent =
-        state.editorMode === "gif" ? "▶" : "↓";
+        hasAnimatedLayers() ? "▶" : "↓";
       elements.downloadButtonLabel.textContent =
-        state.editorMode === "gif" ? "保存 GIF" : "保存图片";
+        hasAnimatedLayers() ? "保存 GIF" : "保存图片";
     }
   }
 
@@ -3629,27 +3920,77 @@
     });
   }
 
-  function renderGifFramePayloads(asset, frameImages, output, onProgress) {
+  function gifTimeline(animatedLayers) {
+    var step = animatedLayers.reduce(function (smallest, layer) {
+      return Math.min(smallest, Math.max(20, Number(layer.frameDelay) || 200));
+    }, 250);
+    var duration = animatedLayers.reduce(function (longest, layer) {
+      return Math.max(
+        longest,
+        Math.max(1, layer.frames.length) * Math.max(20, Number(layer.frameDelay) || 200)
+      );
+    }, step);
+    duration = Math.min(4000, Math.max(step, duration));
+    var frameCount = clamp(Math.ceil(duration / step), 2, 24);
+    return {
+      delay: Math.max(20, Math.round(duration / frameCount)),
+      frameCount: frameCount
+    };
+  }
+
+  function loadAllGifLayerFrames(onProgress) {
+    var animatedLayers = layers.filter(function (layer) {
+      return layer.type === "gif" && layer.visible;
+    });
+    var completed = 0;
+    return Promise.all(
+      animatedLayers.map(function (layer) {
+        var asset =
+          layer.officialAsset && findOfficialCharacter(layer.officialAsset.id);
+        if (!asset) {
+          return layer;
+        }
+        return loadGifFrameImages(asset).then(function (images) {
+          layer.frames = images;
+          layer.image = images[0];
+          completed += 1;
+          if (onProgress) {
+            onProgress(completed / animatedLayers.length);
+          }
+          return layer;
+        });
+      })
+    );
+  }
+
+  function renderGifFramePayloads(animatedLayers, output, onProgress) {
     var canvas = document.createElement("canvas");
     var frames = [];
     var index = 0;
+    var timeline = gifTimeline(animatedLayers);
 
     var renderNext = function () {
-      if (index >= frameImages.length) {
+      if (index >= timeline.frameCount) {
         return Promise.resolve(frames);
       }
-      renderArtwork(canvas, output.scale, {
-        overlayImage: frameImages[index]
+      var time = index * timeline.delay;
+      var layerImages = {};
+      animatedLayers.forEach(function (layer) {
+        var frameIndex =
+          Math.floor(time / Math.max(20, Number(layer.frameDelay) || 200)) %
+          layer.frames.length;
+        layerImages[layer.id] = layer.frames[frameIndex];
       });
+      renderArtwork(canvas, output.scale, { layerImages: layerImages, time: time });
       var ctx = canvas.getContext("2d", { willReadFrequently: true });
       var pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
       frames.push({
         pixels: pixels.buffer,
-        delay: asset.frameDelay
+        delay: timeline.delay
       });
       index += 1;
       if (onProgress) {
-        onProgress(index / frameImages.length);
+        onProgress(index / timeline.frameCount);
       }
       return afterBrowserPaint().then(renderNext);
     };
@@ -3731,18 +4072,16 @@
     if (elements.downloadButton.classList.contains("loading")) {
       return;
     }
-    var asset =
-      selectedOfficialAsset && selectedOfficialAsset.kind === "character"
-        ? findOfficialCharacter(selectedOfficialAsset.id)
-        : null;
-    if (!asset || overlaySourceType !== "official-gif") {
-      showToast("请先选择一组动态贴纸");
+    if (!hasAnimatedLayers()) {
+      showToast("请先添加动态贴纸图层");
       return;
     }
 
     readStateFromControls();
     updateInterface();
     var output = gifOutputDimensions();
+    var animatedLayers = [];
+    var exportFrameCount = 0;
     stopGifPreviewLoop();
     setGifExportBusy(true);
     setDownloadLoading(true);
@@ -3754,18 +4093,21 @@
         console.warn("Artwork resources were not fully ready.", error);
       })
       .then(function () {
-        return loadGifFrameImages(asset, function (progress) {
+        return loadAllGifLayerFrames(function (progress) {
           var percent = Math.round(progress * 100);
           setDownloadProgress("载入 " + percent + "%");
           elements.renderStatus.textContent =
             "正在载入动态帧 · " + percent + "%";
         });
       })
-      .then(function (images) {
+      .then(function () {
+        animatedLayers = getAnimatedLayers();
+        if (!animatedLayers.length) {
+          throw new Error("No animated layers were ready");
+        }
         setDownloadProgress("合成画面…");
         return renderGifFramePayloads(
-          asset,
-          images,
+          animatedLayers,
           output,
           function (progress) {
             var percent = Math.round(progress * 100);
@@ -3776,6 +4118,7 @@
         );
       })
       .then(function (frames) {
+        exportFrameCount = frames.length;
         setDownloadProgress("压缩 GIF…");
         return encodeGifInWorker(frames, output, function (progress) {
           var percent = Math.round(progress * 100);
@@ -3794,7 +4137,7 @@
           " × " +
           output.height +
           " · " +
-          asset.frameCount +
+          exportFrameCount +
           " 帧 · " +
           formatFileSize(blob.size);
         deliverArtwork(blob, filename, dimensions);
@@ -3896,21 +4239,9 @@
     control.addEventListener("change", scheduleRender);
   });
 
-  elements.editorModeTabs.forEach(function (button) {
-    button.addEventListener("click", function () {
-      if (elements.downloadButton.classList.contains("loading")) {
-        return;
-      }
-      setEditorMode(button.dataset.editorMode, true);
-    });
-  });
-
   elements.assetCategoryButtons.forEach(function (button) {
     button.addEventListener("click", function () {
-      if (
-        state.editorMode === "gif" ||
-        elements.downloadButton.classList.contains("loading")
-      ) {
+      if (elements.downloadButton.classList.contains("loading")) {
         return;
       }
       officialAssetCategory = button.dataset.assetCategory;
@@ -3927,6 +4258,101 @@
       return;
     }
     loadOfficialAsset(button.dataset.assetKind, button.dataset.assetId);
+  });
+
+  elements.layerList.addEventListener("click", function (event) {
+    var item = event.target.closest(".layer-item");
+    if (!item) {
+      return;
+    }
+    var layer = getLayer(item.dataset.layerId);
+    if (!layer) {
+      return;
+    }
+    var actionButton = event.target.closest("[data-layer-action]");
+    if (actionButton) {
+      if (actionButton.dataset.layerAction === "visibility") {
+        layer.visible = !layer.visible;
+        if (!layer.visible && layer.id === activeLayerId) {
+          hideCanvasSelection();
+        }
+      } else if (actionButton.dataset.layerAction === "lock") {
+        layer.locked = !layer.locked;
+        if (layer.id === activeLayerId) {
+          state.overlayLocked = layer.type === "artwork" ? false : layer.locked;
+          canvasSelectionVisible = !layer.locked;
+          updateOverlayInterface();
+        }
+      }
+      updateEditorModeInterface();
+      updateOverlayInterface();
+      startGifPreviewLoop();
+      scheduleRender();
+      event.stopPropagation();
+      return;
+    }
+    selectLayer(layer.id);
+  });
+
+  elements.layerList.addEventListener("dragstart", function (event) {
+    var item = event.target.closest(".layer-item");
+    if (!item) {
+      return;
+    }
+    draggedLayerId = item.dataset.layerId;
+    item.classList.add("dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", draggedLayerId);
+    }
+  });
+
+  elements.layerList.addEventListener("dragover", function (event) {
+    var item = event.target.closest(".layer-item");
+    if (!item || !draggedLayerId || item.dataset.layerId === draggedLayerId) {
+      return;
+    }
+    event.preventDefault();
+    clearLayerDropIndicators();
+    var rect = item.getBoundingClientRect();
+    var placeAbove = event.clientY < rect.top + rect.height / 2;
+    item.classList.add(placeAbove ? "drop-before" : "drop-after");
+    item.dataset.dropAbove = String(placeAbove);
+  });
+
+  elements.layerList.addEventListener("drop", function (event) {
+    var item = event.target.closest(".layer-item");
+    if (!item || !draggedLayerId) {
+      return;
+    }
+    event.preventDefault();
+    var placeAbove = item.dataset.dropAbove === "true";
+    reorderLayer(draggedLayerId, item.dataset.layerId, placeAbove);
+    draggedLayerId = "";
+    clearLayerDropIndicators();
+  });
+
+  elements.layerList.addEventListener("dragend", function () {
+    draggedLayerId = "";
+    clearLayerDropIndicators();
+  });
+
+  elements.moveLayerUpButton.addEventListener("click", function () {
+    moveActiveLayer(1);
+  });
+  elements.moveLayerDownButton.addEventListener("click", function () {
+    moveActiveLayer(-1);
+  });
+  elements.duplicateLayerButton.addEventListener("click", duplicateActiveLayer);
+  elements.deleteLayerButton.addEventListener("click", function () {
+    removeLayer(activeLayerId, true);
+  });
+  elements.focusTextControlsButton.addEventListener("click", function () {
+    selectLayer("artwork");
+    elements.textControlsSection.scrollIntoView({ behavior: "smooth", block: "start" });
+  });
+  elements.focusAssetControlsButton.addEventListener("click", function () {
+    elements.assetLibrarySection.scrollIntoView({ behavior: "smooth", block: "start" });
   });
 
   document.querySelectorAll(".canvas-ratio-option").forEach(function (button) {
@@ -3967,7 +4393,7 @@
   });
 
   elements.canvasResetButton.addEventListener("click", function () {
-    if (activeDragTarget === "overlay" && overlayImage) {
+    if (getActiveLayer().type !== "artwork") {
       resetOverlayTransform();
       showToast("图片已回到中央");
     } else {
@@ -3978,13 +4404,13 @@
   });
 
   elements.dragArtworkButton.addEventListener("click", function () {
-    hideCanvasSelection();
-    setDragTarget("artwork");
+    selectLayer("artwork");
   });
 
   elements.dragOverlayButton.addEventListener("click", function () {
-    hideCanvasSelection();
-    setDragTarget("overlay");
+    if (getActiveLayer().type !== "artwork") {
+      selectLayer(activeLayerId);
+    }
   });
 
   [
@@ -4001,15 +4427,41 @@
 
   elements.resetButton.addEventListener("click", function () {
     state = Object.assign({}, defaults);
-    clearOverlayImage(false);
+    getImageLayers().forEach(function (layer) {
+      if (layer.objectUrl) {
+        URL.revokeObjectURL(layer.objectUrl);
+      }
+    });
+    layers = [
+      {
+        id: "artwork",
+        type: "artwork",
+        name: "花式文字",
+        visible: true,
+        locked: false
+      }
+    ];
+    activeLayerId = "artwork";
+    syncLayerControls(layers[0]);
+    stopGifPreviewLoop();
     applyStateToControls();
+    renderLayerList();
     scheduleRender();
-    showToast("已恢复初始样式");
+    showToast("已恢复初始画布");
   });
 
   elements.overlayFile.addEventListener("change", function () {
     anchorFixedViewport(false);
-    loadOverlayFile(elements.overlayFile.files[0]);
+    var files = Array.from(elements.overlayFile.files || []).slice(0, 12);
+    var queue = Promise.resolve();
+    files.forEach(function (file, index) {
+      queue = queue.then(function () {
+        return loadOverlayFile(file, { followRatio: index === 0 });
+      });
+    });
+    if ((elements.overlayFile.files || []).length > files.length) {
+      showToast("一次最多添加 12 张图片");
+    }
     elements.overlayFile.blur();
     anchorFixedViewportAfterLayout(false);
   });
@@ -4023,9 +4475,7 @@
   });
 
   elements.removeOverlayButton.addEventListener("click", function () {
-    clearOverlayImage();
-    scheduleRender();
-    showToast("图片已移除");
+    removeLayer(activeLayerId, true);
   });
 
   elements.resetOverlayButton.addEventListener("click", function () {
@@ -4045,8 +4495,13 @@
       hideCanvasSelection();
       return;
     }
+    selectLayer(hitTarget, { showSelection: true, render: false });
+    var hitLayer = getActiveLayer();
+    if (!hitLayer || hitLayer.locked) {
+      return;
+    }
     canvasSelectionVisible = true;
-    setDragTarget(hitTarget);
+    setDragTarget(hitLayer.type === "artwork" ? "artwork" : "overlay");
     canvasDragging = true;
     canvasDragStart = {
       target: activeDragTarget,
@@ -4100,7 +4555,7 @@
   );
 
   elements.downloadButton.addEventListener("click", function () {
-    if (state.editorMode === "gif") {
+    if (hasAnimatedLayers()) {
       downloadGifArtwork();
     } else {
       downloadArtwork();

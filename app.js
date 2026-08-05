@@ -60,7 +60,8 @@
       x: 50,
       y: 36,
       scale: 100,
-      rotation: 0
+      rotation: 0,
+      opacity: 100
     },
     {
       id: "text-line-2",
@@ -71,7 +72,8 @@
       x: 50,
       y: 68,
       scale: 100,
-      rotation: 0
+      rotation: 0,
+      opacity: 100
     },
     {
       id: "text-subtitle",
@@ -82,7 +84,8 @@
       x: 50,
       y: 87,
       scale: 100,
-      rotation: 0
+      rotation: 0,
+      opacity: 100
     }
   ];
   var layerSequence = 0;
@@ -102,10 +105,12 @@
         y: definition.y,
         scale: definition.scale,
         rotation: definition.rotation,
+        opacity: definition.opacity,
         defaultX: definition.x,
         defaultY: definition.y,
         defaultScale: definition.scale,
         defaultRotation: definition.rotation,
+        defaultOpacity: definition.opacity,
         visible: true,
         locked: false,
         lastIndex: 0
@@ -142,6 +147,13 @@
   var saveAssistReturnFocus = null;
   var activeEditorSection = "text";
   var stackedEditorQuery = window.matchMedia("(max-width: 900px)");
+  var expandedLayerId = activeLayerId;
+  var undoStack = [];
+  var redoStack = [];
+  var historyPresent = null;
+  var historyTimer = 0;
+  var historySuspended = false;
+  var aboutReturnFocus = null;
 
   var elements = {
     workspace: document.querySelector(".workspace"),
@@ -166,7 +178,30 @@
     textLayerToggleButtons: document.querySelectorAll(
       "[data-text-layer-toggle]"
     ),
+    textLayerFields: document.querySelectorAll("[data-text-layer-field]"),
     activeLayerSummary: document.getElementById("activeLayerSummary"),
+    undoButton: document.getElementById("undoButton"),
+    redoButton: document.getElementById("redoButton"),
+    layerPropertiesSection: document.getElementById("layerPropertiesSection"),
+    selectedLayerPreview: document.getElementById("selectedLayerPreview"),
+    selectedLayerType: document.getElementById("selectedLayerType"),
+    selectedLayerName: document.getElementById("selectedLayerName"),
+    selectedLayerScale: document.getElementById("selectedLayerScale"),
+    selectedLayerScaleValue: document.getElementById("selectedLayerScaleValue"),
+    selectedLayerX: document.getElementById("selectedLayerX"),
+    selectedLayerXValue: document.getElementById("selectedLayerXValue"),
+    selectedLayerY: document.getElementById("selectedLayerY"),
+    selectedLayerYValue: document.getElementById("selectedLayerYValue"),
+    selectedLayerRotation: document.getElementById("selectedLayerRotation"),
+    selectedLayerRotationValue: document.getElementById("selectedLayerRotationValue"),
+    selectedLayerOpacity: document.getElementById("selectedLayerOpacity"),
+    selectedLayerOpacityValue: document.getElementById("selectedLayerOpacityValue"),
+    selectedLayerVisibilityButton: document.getElementById(
+      "selectedLayerVisibilityButton"
+    ),
+    selectedLayerLockButton: document.getElementById("selectedLayerLockButton"),
+    selectedLayerResetButton: document.getElementById("selectedLayerResetButton"),
+    selectedLayerDeleteButton: document.getElementById("selectedLayerDeleteButton"),
     textControlsSection: document.getElementById("textControlsSection"),
     assetLibrarySection: document.getElementById("assetLibrarySection"),
     controlPanel: document.querySelector(".control-panel"),
@@ -272,6 +307,10 @@
       "mobileCacheRefreshButton"
     ),
     cacheRefreshLabel: document.getElementById("cacheRefreshLabel"),
+    aboutButton: document.getElementById("aboutButton"),
+    aboutDialog: document.getElementById("aboutDialog"),
+    aboutBackdrop: document.getElementById("aboutBackdrop"),
+    aboutCloseButton: document.getElementById("aboutCloseButton"),
     resetButton: document.getElementById("resetButton"),
     shuffleButton: document.getElementById("shuffleButton"),
     saveAssist: document.getElementById("saveAssist"),
@@ -469,18 +508,22 @@
     });
   }
 
-  function editorSectionForLayer(layer) {
-    return isImageLayer(layer) ? "assets" : "text";
-  }
-
   function setEditorSection(section, options) {
     options = options || {};
-    var allowed = ["text", "layout", "color", "assets", "layers", "export"];
+    var allowed = [
+      "text",
+      "layout",
+      "color",
+      "assets",
+      "layers",
+      "export",
+      "properties"
+    ];
     if (allowed.indexOf(section) < 0) {
       section = "text";
     }
     if (section === "layers" && !stackedEditorQuery.matches) {
-      section = "assets";
+      section = "properties";
     }
 
     activeEditorSection = section;
@@ -510,10 +553,11 @@
 
   function normalizeEditorSectionForViewport() {
     if (!stackedEditorQuery.matches && activeEditorSection === "layers") {
-      setEditorSection("assets", { resetScroll: false });
+      setEditorSection("properties", { resetScroll: false });
     } else {
       requestAnimationFrame(refreshCanvasGeometry);
     }
+    renderLayerList();
   }
 
   function canvasRatioSourceImage() {
@@ -608,6 +652,7 @@
     elements.canvasSize.value = state.canvasSize;
     updateCanvasRatioInterface();
     scheduleRender();
+    scheduleHistoryCapture();
   }
 
   function fitCanvasFrame(dimensions) {
@@ -796,6 +841,7 @@
       state.overlayLocked = false;
       activeDragTarget = "";
       updateTextTransformInterface(null);
+      syncSelectedLayerControls(null);
       return;
     }
 
@@ -812,6 +858,7 @@
       elements.artworkY.value = layer.y;
       elements.artworkRotation.value = layer.rotation;
       updateTextTransformInterface(layer);
+      syncSelectedLayerControls(layer);
       return;
     }
 
@@ -832,6 +879,132 @@
     elements.overlayOpacity.value = layer.opacity;
     elements.overlayLayer.value = "foreground";
     updateTextTransformInterface(null);
+    syncSelectedLayerControls(layer);
+  }
+
+  function layerIconMarkup(name) {
+    var icons = {
+      eye:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path><circle cx="12" cy="12" r="2.5"></circle></svg>',
+      "eye-off":
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4.2 7.9C3.1 9 2.5 10.2 2.5 12c0 0 3.5 6 9.5 6 1.6 0 3-.4 4.2-1"></path><path d="M8.2 6.7A9.2 9.2 0 0 1 12 6c6 0 9.5 6 9.5 6a14 14 0 0 1-2 2.6"></path><path d="m3 3 18 18"></path></svg>',
+      lock:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M8 10V7a4 4 0 0 1 8 0v3"></path></svg>',
+      unlock:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="5" y="10" width="14" height="10" rx="2"></rect><path d="M16 10V7a4 4 0 0 0-7.5-2"></path></svg>',
+      up:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 14 5-5 5 5"></path></svg>',
+      down:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>',
+      copy:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>',
+      trash:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="m9 7 .7-3h4.6l.7 3"></path><path d="m6.5 7 .8 13h9.4l.8-13"></path><path d="M10 11v5M14 11v5"></path></svg>',
+      reset:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7v5h5"></path><path d="M5.2 12a7 7 0 1 1 2 5"></path></svg>'
+    };
+    return icons[name] || "";
+  }
+
+  function syncSelectedLayerControls(layer) {
+    if (!elements.layerPropertiesSection) {
+      return;
+    }
+    var hasLayer = Boolean(layer);
+    [
+      elements.selectedLayerScale,
+      elements.selectedLayerX,
+      elements.selectedLayerY,
+      elements.selectedLayerRotation,
+      elements.selectedLayerOpacity,
+      elements.selectedLayerVisibilityButton,
+      elements.selectedLayerLockButton,
+      elements.selectedLayerResetButton,
+      elements.selectedLayerDeleteButton
+    ].forEach(function (control) {
+      if (control) {
+        control.disabled = !hasLayer;
+      }
+    });
+    if (!layer) {
+      elements.selectedLayerName.textContent = "未选择图层";
+      elements.selectedLayerType.textContent = "请从图层列表选择";
+      elements.selectedLayerPreview.textContent = "—";
+      return;
+    }
+
+    elements.selectedLayerName.textContent = layer.name;
+    elements.selectedLayerType.textContent = layerTypeLabel(layer);
+    elements.selectedLayerPreview.replaceChildren();
+    if (isTextLayer(layer)) {
+      elements.selectedLayerPreview.textContent = layer.thumbnail || "T";
+    } else {
+      var preview = document.createElement("img");
+      preview.alt = "";
+      preview.src = layer.thumbnailSrc || layer.objectUrl || "";
+      elements.selectedLayerPreview.appendChild(preview);
+    }
+
+    elements.selectedLayerScale.min = isTextLayer(layer) ? "20" : "5";
+    elements.selectedLayerScale.value = layer.scale;
+    elements.selectedLayerX.value = layer.x;
+    elements.selectedLayerY.value = layer.y;
+    elements.selectedLayerRotation.value = layer.rotation;
+    elements.selectedLayerOpacity.value = Number.isFinite(layer.opacity)
+      ? layer.opacity
+      : 100;
+    elements.selectedLayerScaleValue.textContent = layer.scale + "%";
+    elements.selectedLayerXValue.textContent = layer.x + "%";
+    elements.selectedLayerYValue.textContent = layer.y + "%";
+    elements.selectedLayerRotationValue.textContent = layer.rotation + "°";
+    elements.selectedLayerOpacityValue.textContent =
+      (Number.isFinite(layer.opacity) ? layer.opacity : 100) + "%";
+    updateRange(
+      elements.selectedLayerScale,
+      elements.selectedLayerScaleValue,
+      "%"
+    );
+    updateRange(elements.selectedLayerX, elements.selectedLayerXValue, "%");
+    updateRange(elements.selectedLayerY, elements.selectedLayerYValue, "%");
+    updateRange(
+      elements.selectedLayerRotation,
+      elements.selectedLayerRotationValue,
+      "°"
+    );
+    updateRange(
+      elements.selectedLayerOpacity,
+      elements.selectedLayerOpacityValue,
+      "%"
+    );
+
+    var transformLocked = Boolean(layer.locked);
+    [
+      elements.selectedLayerScale,
+      elements.selectedLayerX,
+      elements.selectedLayerY,
+      elements.selectedLayerRotation,
+      elements.selectedLayerOpacity,
+      elements.selectedLayerResetButton
+    ].forEach(function (control) {
+      control.disabled = transformLocked;
+    });
+    elements.selectedLayerVisibilityButton.innerHTML =
+      layerIconMarkup(layer.visible ? "eye" : "eye-off") +
+      "<span>" + (layer.visible ? "隐藏图层" : "显示图层") + "</span>";
+    elements.selectedLayerVisibilityButton.setAttribute(
+      "aria-pressed",
+      String(layer.visible)
+    );
+    elements.selectedLayerLockButton.innerHTML =
+      layerIconMarkup(layer.locked ? "lock" : "unlock") +
+      "<span>" + (layer.locked ? "解锁图层" : "锁定图层") + "</span>";
+    elements.selectedLayerLockButton.setAttribute(
+      "aria-pressed",
+      String(layer.locked)
+    );
+    elements.selectedLayerDeleteButton.textContent = isTextLayer(layer)
+      ? "停用文字图层"
+      : "删除图层";
   }
 
   function updateLayerActionState() {
@@ -873,7 +1046,77 @@
       if (status) {
         status.textContent = active ? "已启用" : "未启用";
       }
+      var field = document.querySelector(
+        '[data-text-layer-field="' + button.dataset.textLayerToggle + '"]'
+      );
+      if (field) {
+        field.classList.toggle("is-disabled", !active);
+        var input = field.querySelector("input");
+        if (input) {
+          input.disabled = !active;
+        }
+      }
     });
+  }
+
+  function createInlineLayerProperties(layer) {
+    var wrapper = document.createElement("div");
+    var locked = Boolean(layer.locked);
+    var opacity = Number.isFinite(layer.opacity) ? layer.opacity : 100;
+    wrapper.className = "layer-inline-properties";
+    wrapper.dataset.inlineLayerId = layer.id;
+    wrapper.innerHTML =
+      '<label><span>大小 <output>' +
+      layer.scale +
+      '%</output></span><input type="range" min="' +
+      (isTextLayer(layer) ? "20" : "5") +
+      '" max="240" value="' +
+      layer.scale +
+      '" data-layer-property="scale"' +
+      (locked ? " disabled" : "") +
+      "></label>" +
+      '<label><span>左右 <output>' +
+      layer.x +
+      '%</output></span><input type="range" min="0" max="100" value="' +
+      layer.x +
+      '" data-layer-property="x"' +
+      (locked ? " disabled" : "") +
+      "></label>" +
+      '<label><span>上下 <output>' +
+      layer.y +
+      '%</output></span><input type="range" min="0" max="100" value="' +
+      layer.y +
+      '" data-layer-property="y"' +
+      (locked ? " disabled" : "") +
+      "></label>" +
+      '<label><span>旋转 <output>' +
+      layer.rotation +
+      '°</output></span><input type="range" min="-180" max="180" value="' +
+      layer.rotation +
+      '" data-layer-property="rotation"' +
+      (locked ? " disabled" : "") +
+      "></label>" +
+      '<label class="wide"><span>透明度 <output>' +
+      opacity +
+      '%</output></span><input type="range" min="0" max="100" value="' +
+      opacity +
+      '" data-layer-property="opacity"' +
+      (locked ? " disabled" : "") +
+      "></label>" +
+      '<button type="button" data-layer-action="reset"' +
+      (locked ? " disabled" : "") +
+      ">" +
+      layerIconMarkup("reset") +
+      "<span>恢复默认位置</span></button>";
+    wrapper.querySelectorAll("[data-layer-property]").forEach(function (input) {
+      var output = input.parentElement.querySelector("output");
+      updateRange(
+        input,
+        output,
+        input.dataset.layerProperty === "rotation" ? "°" : "%"
+      );
+    });
+    return wrapper;
   }
 
   function clearLayerDropIndicators() {
@@ -902,6 +1145,7 @@
     layers = nextLayers;
     renderLayerList();
     scheduleRender();
+    scheduleHistoryCapture();
   }
 
   function renderLayerList() {
@@ -926,11 +1170,12 @@
 
         item.className = "layer-item";
         item.dataset.layerId = layer.id;
-        item.draggable = true;
+        item.draggable = !stackedEditorQuery.matches;
         item.setAttribute("role", "option");
         item.setAttribute("aria-selected", String(layer.id === activeLayerId));
         item.classList.toggle("active", layer.id === activeLayerId);
         item.classList.toggle("is-hidden", !layer.visible);
+        item.classList.toggle("is-expanded", layer.id === expandedLayerId);
 
         handle.className = "layer-drag-handle";
         handle.textContent = "⋮⋮";
@@ -962,39 +1207,41 @@
         visibility.dataset.layerAction = "visibility";
         visibility.title = layer.visible ? "隐藏图层" : "显示图层";
         visibility.setAttribute("aria-label", visibility.title);
-        visibility.textContent = layer.visible ? "◉" : "○";
+        visibility.innerHTML = layerIconMarkup(
+          layer.visible ? "eye" : "eye-off"
+        );
 
         lock.type = "button";
         lock.className = "layer-inline-button";
         lock.dataset.layerAction = "lock";
         lock.title = layer.locked ? "解锁图层" : "锁定图层";
         lock.setAttribute("aria-label", lock.title);
-        lock.textContent = layer.locked ? "◆" : "◇";
+        lock.innerHTML = layerIconMarkup(layer.locked ? "lock" : "unlock");
 
         actions.className = "layer-entry-actions";
         [
           {
             action: "move-up",
             label: "上移一层",
-            text: "↑",
+            icon: "up",
             disabled: layerIndex === layers.length - 1
           },
           {
             action: "move-down",
             label: "下移一层",
-            text: "↓",
+            icon: "down",
             disabled: layerIndex === 0
           },
           {
             action: "duplicate",
             label: "复制图层",
-            text: "复制",
+            icon: "copy",
             hidden: isTextLayer(layer)
           },
           {
             action: "delete",
             label: isTextLayer(layer) ? "停用文字图层" : "删除图层",
-            text: isTextLayer(layer) ? "停用" : "删除",
+            icon: "trash",
             danger: true
           }
         ].forEach(function (config) {
@@ -1006,7 +1253,11 @@
           button.dataset.layerAction = config.action;
           button.title = config.label;
           button.setAttribute("aria-label", config.label + "：" + layer.name);
-          button.textContent = config.text;
+          button.innerHTML =
+            layerIconMarkup(config.icon) +
+            '<span class="visually-hidden">' +
+            config.label +
+            "</span>";
           button.disabled = Boolean(config.disabled);
           button.classList.toggle("danger", Boolean(config.danger));
           actions.appendChild(button);
@@ -1018,6 +1269,9 @@
         item.appendChild(visibility);
         item.appendChild(lock);
         item.appendChild(actions);
+        if (stackedEditorQuery.matches && layer.id === expandedLayerId) {
+          item.appendChild(createInlineLayerProperties(layer));
+        }
         fragment.appendChild(item);
       });
     elements.layerList.replaceChildren(fragment);
@@ -1032,14 +1286,15 @@
     }
     syncActiveLayerFromControls();
     activeLayerId = layer.id;
+    expandedLayerId = layer.id;
     syncLayerControls(layer);
     canvasSelectionVisible = options.showSelection !== false;
     renderLayerList();
     updateOverlayInterface();
     updateDragTargetInterface();
     updateCanvasSelection(lastPreviewResult);
-    if (options.syncEditorSection !== false) {
-      setEditorSection(editorSectionForLayer(layer), { resetScroll: false });
+    if (options.syncEditorSection !== false && !stackedEditorQuery.matches) {
+      setEditorSection("properties", { resetScroll: false });
     }
     if (options.render !== false) {
       scheduleRender();
@@ -1059,6 +1314,7 @@
     selectLayer(layer.id, { showSelection: true, render: false });
     startGifPreviewLoop();
     scheduleRender();
+    scheduleHistoryCapture();
   }
 
   function removeLayer(layerId, notifyUser) {
@@ -1071,25 +1327,19 @@
     if (isTextLayer(layer)) {
       layer.lastIndex = index;
     }
-    if (
-      layer.objectUrl &&
-      !layers.some(function (item) {
-        return item.objectUrl === layer.objectUrl;
-      })
-    ) {
-      URL.revokeObjectURL(layer.objectUrl);
-    }
     var next = layers[Math.min(index, layers.length - 1)] || layers[0] || null;
     activeLayerId = next ? next.id : "";
+    expandedLayerId = activeLayerId;
     syncLayerControls(next);
     canvasSelectionVisible = Boolean(next && !next.locked);
     updateEditorModeInterface();
     updateOverlayInterface();
-    if (next && activeEditorSection !== "layers") {
-      setEditorSection(editorSectionForLayer(next), { resetScroll: false });
+    if (next && !stackedEditorQuery.matches) {
+      setEditorSection("properties", { resetScroll: false });
     }
     startGifPreviewLoop();
     scheduleRender();
+    scheduleHistoryCapture();
     if (notifyUser) {
       showToast(
         isTextLayer(layer)
@@ -1124,6 +1374,7 @@
     layers.splice(insertAt, 0, layer);
     selectLayer(layer.id, { showSelection: true, render: false });
     scheduleRender();
+    scheduleHistoryCapture();
     if (notifyUser) {
       showToast(layer.name + "已启用");
     }
@@ -1140,6 +1391,7 @@
     layers.splice(nextIndex, 0, layer);
     renderLayerList();
     scheduleRender();
+    scheduleHistoryCapture();
   }
 
   function duplicateActiveLayer() {
@@ -1158,6 +1410,7 @@
     var index = layers.indexOf(layer);
     layers.splice(index + 1, 0, duplicate);
     selectLayer(duplicate.id);
+    scheduleHistoryCapture();
     showToast("图层已复制");
   }
 
@@ -1210,6 +1463,9 @@
     layer.x = layer.defaultX;
     layer.y = layer.defaultY;
     layer.rotation = layer.defaultRotation;
+    layer.opacity = Number.isFinite(layer.defaultOpacity)
+      ? layer.defaultOpacity
+      : 100;
     state.artworkScale = layer.scale;
     state.artworkX = layer.x;
     state.artworkY = layer.y;
@@ -1220,6 +1476,7 @@
       elements.artworkY.value = state.artworkY;
       elements.artworkRotation.value = state.artworkRotation;
     }
+    syncSelectedLayerControls(layer);
   }
 
   function updateDragTargetInterface() {
@@ -1269,6 +1526,7 @@
     setDragTarget(layer.id);
     renderLayerList();
     scheduleRender();
+    scheduleHistoryCapture();
     if (notifyUser) {
       showToast(state.overlayLocked ? "图片已锁定" : "图片已解锁");
     }
@@ -1291,12 +1549,102 @@
     }
     var layer = getActiveLayer();
     if (isImageLayer(layer)) {
-      layer.scale = state.overlayScale;
-      layer.x = state.overlayX;
-      layer.y = state.overlayY;
-      layer.rotation = state.overlayRotation;
-      layer.opacity = state.overlayOpacity;
+      layer.scale = Number.isFinite(layer.defaultScale)
+        ? layer.defaultScale
+        : state.overlayScale;
+      layer.x = Number.isFinite(layer.defaultX) ? layer.defaultX : state.overlayX;
+      layer.y = Number.isFinite(layer.defaultY) ? layer.defaultY : state.overlayY;
+      layer.rotation = Number.isFinite(layer.defaultRotation)
+        ? layer.defaultRotation
+        : state.overlayRotation;
+      layer.opacity = Number.isFinite(layer.defaultOpacity)
+        ? layer.defaultOpacity
+        : state.overlayOpacity;
+      syncLayerControls(layer);
     }
+  }
+
+  function resetLayerTransform(layer) {
+    if (!layer || layer.locked) {
+      return;
+    }
+    if (isTextLayer(layer)) {
+      resetArtworkTransform();
+    } else {
+      resetOverlayTransform();
+    }
+    syncSelectedLayerControls(layer);
+    renderLayerList();
+    updateCanvasSelection(lastPreviewResult);
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function setLayerProperty(layer, property, value, output) {
+    if (!layer || layer.locked) {
+      return;
+    }
+    var ranges = {
+      scale: [isTextLayer(layer) ? 20 : 5, 240],
+      x: [0, 100],
+      y: [0, 100],
+      rotation: [-180, 180],
+      opacity: [0, 100]
+    };
+    if (!ranges[property]) {
+      return;
+    }
+    var next = clamp(Number(value), ranges[property][0], ranges[property][1]);
+    layer[property] = next;
+    if (output) {
+      output.textContent =
+        next + (property === "rotation" ? "°" : "%");
+    }
+    syncLayerControls(layer);
+    updateCanvasSelection(lastPreviewResult);
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function setLayerLocked(layer, locked, notifyUser) {
+    if (!layer) {
+      return;
+    }
+    if (isImageLayer(layer)) {
+      setOverlayLocked(locked, notifyUser);
+    } else {
+      layer.locked = Boolean(locked);
+      canvasDragging = false;
+      canvasDragStart = null;
+      canvasHandleDrag = null;
+      canvasSelectionVisible = !layer.locked;
+      elements.canvasFrame.classList.remove("dragging", "manipulating");
+      syncLayerControls(layer);
+      renderLayerList();
+      updateDragTargetInterface();
+      updateCanvasSelection(lastPreviewResult);
+      scheduleRender();
+      if (notifyUser) {
+        showToast(layer.locked ? "文字图层已锁定" : "文字图层已解锁");
+      }
+    }
+    scheduleHistoryCapture();
+  }
+
+  function setLayerVisibility(layer, visible) {
+    if (!layer) {
+      return;
+    }
+    layer.visible = Boolean(visible);
+    if (!layer.visible && layer.id === activeLayerId) {
+      hideCanvasSelection();
+    }
+    syncSelectedLayerControls(layer);
+    renderLayerList();
+    updateOverlayInterface();
+    startGifPreviewLoop();
+    scheduleRender();
+    scheduleHistoryCapture();
   }
 
   function findOfficialCharacter(id) {
@@ -1489,11 +1837,16 @@
           kind === "decoration" ? source : characterThumbnailSource(id),
         objectUrl: "",
         bytes: 0,
-        scale: kind === "character" || gifMode ? 36 : 62,
+        scale: kind === "character" || gifMode ? 36 : 28,
         x: kind === "character" || gifMode ? 78 : 50,
         y: kind === "character" || gifMode ? 54 : 50,
         rotation: 0,
         opacity: 100,
+        defaultScale: kind === "character" || gifMode ? 36 : 28,
+        defaultX: kind === "character" || gifMode ? 78 : 50,
+        defaultY: kind === "character" || gifMode ? 54 : 50,
+        defaultRotation: 0,
+        defaultOpacity: 100,
         visible: true,
         locked: false
       };
@@ -1585,6 +1938,11 @@
           y: 50,
           rotation: 0,
           opacity: 100,
+          defaultScale: 100,
+          defaultX: 50,
+          defaultY: 50,
+          defaultRotation: 0,
+          defaultOpacity: 100,
           visible: true,
           locked: false
         };
@@ -2073,6 +2431,7 @@
       }
     }
 
+    syncSelectedLayerControls(layer);
     scheduleRender();
     event.preventDefault();
     event.stopPropagation();
@@ -2091,6 +2450,9 @@
     ) {
       handle.releasePointerCapture(event.pointerId);
     }
+    syncSelectedLayerControls(getActiveLayer());
+    renderLayerList();
+    scheduleHistoryCapture();
     event.preventDefault();
     event.stopPropagation();
   }
@@ -2137,6 +2499,7 @@
       updateRange(elements.artworkX, elements.artworkXValue, "%");
       updateRange(elements.artworkY, elements.artworkYValue, "%");
     }
+    syncSelectedLayerControls(layer);
     scheduleRender();
   }
 
@@ -2297,6 +2660,7 @@
     updateColorInterface();
     if (render !== false) {
       scheduleRender();
+      scheduleHistoryCapture();
     }
     return true;
   }
@@ -3475,6 +3839,11 @@
       return;
     }
     ctx.save();
+    ctx.globalAlpha = clamp(
+      (Number.isFinite(layer.opacity) ? layer.opacity : 100) / 100,
+      0,
+      1
+    );
     applyTextLayerTransform(ctx, width, height, layer, entry);
 
     if (entry.kind === "subtitle") {
@@ -3980,6 +4349,185 @@
     });
   }
 
+  function cloneLayerForHistory(layer) {
+    var clone = Object.assign({}, layer);
+    clone.frames = layer.frames ? layer.frames.slice() : [];
+    clone.officialAsset = layer.officialAsset
+      ? Object.assign({}, layer.officialAsset)
+      : null;
+    return clone;
+  }
+
+  function captureHistorySnapshot() {
+    readStateFromControls();
+    var textLayers = {};
+    Object.keys(textLayerStore).forEach(function (layerId) {
+      textLayers[layerId] = cloneLayerForHistory(textLayerStore[layerId]);
+    });
+    return {
+      state: Object.assign({}, state),
+      textLayers: textLayers,
+      layers: layers.map(cloneLayerForHistory),
+      activeLayerId: activeLayerId,
+      expandedLayerId: expandedLayerId,
+      officialAssetCategory: officialAssetCategory
+    };
+  }
+
+  function historyLayerFingerprint(layer) {
+    return {
+      id: layer.id,
+      type: layer.type,
+      sourceType: layer.sourceType || "",
+      name: layer.name,
+      x: layer.x,
+      y: layer.y,
+      scale: layer.scale,
+      rotation: layer.rotation,
+      opacity: Number.isFinite(layer.opacity) ? layer.opacity : 100,
+      visible: layer.visible,
+      locked: layer.locked,
+      lastIndex: layer.lastIndex,
+      defaultX: layer.defaultX,
+      defaultY: layer.defaultY,
+      defaultScale: layer.defaultScale,
+      defaultRotation: layer.defaultRotation,
+      defaultOpacity: layer.defaultOpacity,
+      officialAsset: layer.officialAsset || null,
+      objectUrl: layer.objectUrl || ""
+    };
+  }
+
+  function historySignature(snapshot) {
+    var textFingerprint = {};
+    Object.keys(snapshot.textLayers)
+      .sort()
+      .forEach(function (layerId) {
+        textFingerprint[layerId] = historyLayerFingerprint(
+          snapshot.textLayers[layerId]
+        );
+      });
+    return JSON.stringify({
+      state: snapshot.state,
+      textLayers: textFingerprint,
+      layers: snapshot.layers.map(historyLayerFingerprint),
+      activeLayerId: snapshot.activeLayerId,
+      expandedLayerId: snapshot.expandedLayerId,
+      officialAssetCategory: snapshot.officialAssetCategory
+    });
+  }
+
+  function updateHistoryButtons() {
+    if (!elements.undoButton || !elements.redoButton) {
+      return;
+    }
+    elements.undoButton.disabled = undoStack.length === 0;
+    elements.redoButton.disabled = redoStack.length === 0;
+    elements.undoButton.title = undoStack.length
+      ? "撤回上一步（Ctrl/Cmd + Z）"
+      : "没有可撤回的操作";
+    elements.redoButton.title = redoStack.length
+      ? "重做下一步（Ctrl/Cmd + Shift + Z）"
+      : "没有可重做的操作";
+  }
+
+  function flushHistoryCapture() {
+    window.clearTimeout(historyTimer);
+    historyTimer = 0;
+    if (historySuspended || !historyPresent) {
+      return;
+    }
+    var next = captureHistorySnapshot();
+    if (historySignature(next) === historySignature(historyPresent)) {
+      return;
+    }
+    undoStack.push(historyPresent);
+    if (undoStack.length > 60) {
+      undoStack.shift();
+    }
+    historyPresent = next;
+    redoStack = [];
+    updateHistoryButtons();
+  }
+
+  function scheduleHistoryCapture() {
+    if (historySuspended || !historyPresent) {
+      return;
+    }
+    window.clearTimeout(historyTimer);
+    historyTimer = window.setTimeout(flushHistoryCapture, 260);
+  }
+
+  function restoreHistorySnapshot(snapshot) {
+    historySuspended = true;
+    state = Object.assign({}, snapshot.state);
+    textLayerStore = Object.create(null);
+    Object.keys(snapshot.textLayers).forEach(function (layerId) {
+      textLayerStore[layerId] = cloneLayerForHistory(
+        snapshot.textLayers[layerId]
+      );
+    });
+    layers = snapshot.layers.map(function (layer) {
+      return isTextLayer(layer)
+        ? textLayerStore[layer.id]
+        : cloneLayerForHistory(layer);
+    });
+    activeLayerId = getLayer(snapshot.activeLayerId)
+      ? snapshot.activeLayerId
+      : layers[0]
+        ? layers[0].id
+        : "";
+    expandedLayerId = getLayer(snapshot.expandedLayerId)
+      ? snapshot.expandedLayerId
+      : activeLayerId;
+    officialAssetCategory = snapshot.officialAssetCategory || "characters";
+    canvasSelectionVisible = Boolean(getActiveLayer());
+    applyStateToControls();
+    syncLayerControls(getActiveLayer());
+    updateCanvasRatioInterface();
+    updateEditorModeInterface();
+    renderLayerList();
+    updateOverlayInterface();
+    updateDragTargetInterface();
+    startGifPreviewLoop();
+    if (!stackedEditorQuery.matches && getActiveLayer()) {
+      setEditorSection("properties", { resetScroll: false });
+    }
+    historySuspended = false;
+    scheduleRender();
+  }
+
+  function undoHistory() {
+    flushHistoryCapture();
+    if (!undoStack.length || !historyPresent) {
+      return;
+    }
+    redoStack.push(historyPresent);
+    historyPresent = undoStack.pop();
+    restoreHistorySnapshot(historyPresent);
+    updateHistoryButtons();
+    showToast("已撤回上一步");
+  }
+
+  function redoHistory() {
+    flushHistoryCapture();
+    if (!redoStack.length || !historyPresent) {
+      return;
+    }
+    undoStack.push(historyPresent);
+    historyPresent = redoStack.pop();
+    restoreHistorySnapshot(historyPresent);
+    updateHistoryButtons();
+    showToast("已重做下一步");
+  }
+
+  function initializeHistory() {
+    undoStack = [];
+    redoStack = [];
+    historyPresent = captureHistorySnapshot();
+    updateHistoryButtons();
+  }
+
   function applyStateToControls() {
     elements.line1.value = state.line1;
     elements.line2.value = state.line2;
@@ -4020,6 +4568,30 @@
     toastTimer = window.setTimeout(function () {
       elements.toast.classList.remove("visible");
     }, 2100);
+  }
+
+  function openAboutDialog() {
+    if (!elements.aboutDialog) {
+      return;
+    }
+    aboutReturnFocus = document.activeElement;
+    elements.aboutDialog.hidden = false;
+    document.body.classList.add("about-open");
+    requestAnimationFrame(function () {
+      elements.aboutCloseButton.focus();
+    });
+  }
+
+  function closeAboutDialog() {
+    if (!elements.aboutDialog || elements.aboutDialog.hidden) {
+      return;
+    }
+    elements.aboutDialog.hidden = true;
+    document.body.classList.remove("about-open");
+    if (aboutReturnFocus && typeof aboutReturnFocus.focus === "function") {
+      aboutReturnFocus.focus();
+    }
+    aboutReturnFocus = null;
   }
 
   function safeFilename(text) {
@@ -4763,8 +5335,74 @@
     elements.exportScale,
     elements.gifQuality
   ].forEach(function (control) {
-    control.addEventListener("input", scheduleRender);
-    control.addEventListener("change", scheduleRender);
+    control.addEventListener("input", function () {
+      scheduleRender();
+      scheduleHistoryCapture();
+    });
+    control.addEventListener("change", function () {
+      scheduleRender();
+      scheduleHistoryCapture();
+    });
+  });
+
+  [
+    {
+      control: elements.selectedLayerScale,
+      property: "scale",
+      output: elements.selectedLayerScaleValue
+    },
+    {
+      control: elements.selectedLayerX,
+      property: "x",
+      output: elements.selectedLayerXValue
+    },
+    {
+      control: elements.selectedLayerY,
+      property: "y",
+      output: elements.selectedLayerYValue
+    },
+    {
+      control: elements.selectedLayerRotation,
+      property: "rotation",
+      output: elements.selectedLayerRotationValue
+    },
+    {
+      control: elements.selectedLayerOpacity,
+      property: "opacity",
+      output: elements.selectedLayerOpacityValue
+    }
+  ].forEach(function (item) {
+    item.control.addEventListener("input", function () {
+      setLayerProperty(
+        getActiveLayer(),
+        item.property,
+        item.control.value,
+        item.output
+      );
+    });
+  });
+
+  elements.selectedLayerVisibilityButton.addEventListener("click", function () {
+    var layer = getActiveLayer();
+    if (layer) {
+      setLayerVisibility(layer, !layer.visible);
+    }
+  });
+  elements.selectedLayerLockButton.addEventListener("click", function () {
+    var layer = getActiveLayer();
+    if (layer) {
+      setLayerLocked(layer, !layer.locked, true);
+    }
+  });
+  elements.selectedLayerResetButton.addEventListener("click", function () {
+    var layer = getActiveLayer();
+    resetLayerTransform(layer);
+    if (layer) {
+      showToast(layer.name + "已恢复默认位置");
+    }
+  });
+  elements.selectedLayerDeleteButton.addEventListener("click", function () {
+    removeLayer(activeLayerId, true);
   });
 
   elements.editorSectionTabs.forEach(function (button) {
@@ -4822,6 +5460,21 @@
     loadOfficialAsset(button.dataset.assetKind, button.dataset.assetId);
   });
 
+  elements.layerList.addEventListener("input", function (event) {
+    var control = event.target.closest("[data-layer-property]");
+    var item = event.target.closest(".layer-item");
+    if (!control || !item) {
+      return;
+    }
+    var output = control.parentElement.querySelector("output");
+    setLayerProperty(
+      getLayer(item.dataset.layerId),
+      control.dataset.layerProperty,
+      control.value,
+      output
+    );
+  });
+
   elements.layerList.addEventListener("click", function (event) {
     var item = event.target.closest(".layer-item");
     if (!item) {
@@ -4855,25 +5508,46 @@
         event.stopPropagation();
         return;
       }
-      if (action === "visibility") {
-        layer.visible = !layer.visible;
-        if (!layer.visible && layer.id === activeLayerId) {
-          hideCanvasSelection();
-        }
-      } else if (action === "lock") {
-        layer.locked = !layer.locked;
-        if (layer.id === activeLayerId) {
-          state.overlayLocked = isImageLayer(layer) ? layer.locked : false;
-          canvasSelectionVisible = !layer.locked;
-          updateTextTransformInterface(layer);
-          updateOverlayInterface();
-        }
+      if (action === "reset") {
+        selectLayer(layer.id, {
+          showSelection: true,
+          render: false,
+          syncEditorSection: false
+        });
+        resetLayerTransform(layer);
+        showToast(layer.name + "已恢复默认位置");
+        event.stopPropagation();
+        return;
       }
-      updateEditorModeInterface();
-      updateOverlayInterface();
-      startGifPreviewLoop();
-      scheduleRender();
+      if (action === "visibility") {
+        setLayerVisibility(layer, !layer.visible);
+        event.stopPropagation();
+        return;
+      } else if (action === "lock") {
+        selectLayer(layer.id, {
+          showSelection: true,
+          render: false,
+          syncEditorSection: false
+        });
+        setLayerLocked(layer, !layer.locked, true);
+        event.stopPropagation();
+        return;
+      }
+    }
+    if (event.target.closest(".layer-inline-properties")) {
       event.stopPropagation();
+      return;
+    }
+    if (stackedEditorQuery.matches) {
+      var shouldExpand = expandedLayerId !== layer.id;
+      selectLayer(layer.id, {
+        showSelection: true,
+        render: false,
+        syncEditorSection: false
+      });
+      expandedLayerId = shouldExpand ? layer.id : "";
+      renderLayerList();
+      scheduleRender();
       return;
     }
     selectLayer(layer.id);
@@ -4933,13 +5607,27 @@
       state.backgroundMode = button.dataset.background;
       updateBackgroundInterface();
       scheduleRender();
+      scheduleHistoryCapture();
     });
   });
 
   elements.textLayerToggleButtons.forEach(function (button) {
     button.addEventListener("click", function () {
       var layerId = button.dataset.textLayerToggle;
-      setTextLayerActive(layerId, !getLayer(layerId), true);
+      var enabled = !getLayer(layerId);
+      setTextLayerActive(layerId, enabled, true);
+      setEditorSection("text", { resetScroll: false });
+      if (enabled) {
+        var field = document.querySelector(
+          '[data-text-layer-field="' + layerId + '"] input'
+        );
+        requestAnimationFrame(function () {
+          if (field) {
+            field.focus();
+            field.select();
+          }
+        });
+      }
     });
   });
 
@@ -5023,6 +5711,7 @@
       setColorValue("skyColor", palette[2], false);
       updateColorInterface();
       scheduleRender();
+      scheduleHistoryCapture();
       showToast("整套配色已应用");
     });
   });
@@ -5035,12 +5724,14 @@
       elements.subtitle.value = example.subtitle;
       state.seed = (state.seed + 97) >>> 0;
       scheduleRender();
+      scheduleHistoryCapture();
     });
   });
 
   elements.shuffleButton.addEventListener("click", function () {
     state.seed = (state.seed + 7919) >>> 0;
     scheduleRender();
+    scheduleHistoryCapture();
     showToast("星星换好啦");
   });
 
@@ -5048,6 +5739,7 @@
     var layer = getActiveLayer();
     resetArtworkTransform();
     scheduleRender();
+    scheduleHistoryCapture();
     if (isTextLayer(layer)) {
       showToast(layer.name + "已回到默认位置");
     }
@@ -5066,6 +5758,7 @@
       showToast(layer.name + "已回到默认位置");
     }
     scheduleRender();
+    scheduleHistoryCapture();
   });
 
   elements.canvasSelectionDeleteButton.addEventListener("click", function (event) {
@@ -5088,18 +5781,15 @@
 
   elements.resetButton.addEventListener("click", function () {
     state = Object.assign({}, defaults);
-    getImageLayers().forEach(function (layer) {
-      if (layer.objectUrl) {
-        URL.revokeObjectURL(layer.objectUrl);
-      }
-    });
     layers = createDefaultTextLayers();
     activeLayerId = "text-line-1";
+    expandedLayerId = activeLayerId;
     stopGifPreviewLoop();
     applyStateToControls();
     syncLayerControls(getActiveLayer());
     renderLayerList();
     scheduleRender();
+    scheduleHistoryCapture();
     showToast("已恢复初始画布");
   });
 
@@ -5189,6 +5879,9 @@
     ) {
       elements.canvas.releasePointerCapture(event.pointerId);
     }
+    syncSelectedLayerControls(getActiveLayer());
+    renderLayerList();
+    scheduleHistoryCapture();
   }
 
   elements.canvas.addEventListener("pointerup", finishCanvasDrag);
@@ -5215,6 +5908,11 @@
     }
   });
   elements.cacheRefreshButton.addEventListener("click", refreshSiteCache);
+  elements.undoButton.addEventListener("click", undoHistory);
+  elements.redoButton.addEventListener("click", redoHistory);
+  elements.aboutButton.addEventListener("click", openAboutDialog);
+  elements.aboutBackdrop.addEventListener("click", closeAboutDialog);
+  elements.aboutCloseButton.addEventListener("click", closeAboutDialog);
   if (elements.mobileCacheRefreshButton) {
     elements.mobileCacheRefreshButton.addEventListener(
       "click",
@@ -5231,6 +5929,29 @@
   );
 
   document.addEventListener("keydown", function (event) {
+    var key = String(event.key).toLowerCase();
+    if ((event.ctrlKey || event.metaKey) && key === "z") {
+      event.preventDefault();
+      if (event.shiftKey) {
+        redoHistory();
+      } else {
+        undoHistory();
+      }
+      return;
+    }
+    if ((event.ctrlKey || event.metaKey) && key === "y") {
+      event.preventDefault();
+      redoHistory();
+      return;
+    }
+    if (
+      event.key === "Escape" &&
+      elements.aboutDialog &&
+      !elements.aboutDialog.hidden
+    ) {
+      closeAboutDialog();
+      return;
+    }
     if (
       event.key === "Escape" &&
       elements.saveAssist &&
@@ -5317,6 +6038,7 @@
   applyStateToControls();
   setEditorSection(activeEditorSection, { resetScroll: false });
   renderPreview();
+  initializeHistory();
   restoreCachedOverlay();
   if (document.fonts && document.fonts.load) {
     logoFontsReady = Promise.all([

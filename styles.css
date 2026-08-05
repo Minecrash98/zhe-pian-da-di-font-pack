@@ -2804,6 +2804,695 @@ details[open] > .precision-summary .precision-chevron {
   }
 }
 
+/* Layer inspector, history controls and compact project information */
+.visually-hidden {
+  position: absolute !important;
+  width: 1px !important;
+  height: 1px !important;
+  padding: 0 !important;
+  overflow: hidden !important;
+  clip: rect(0, 0, 0, 0) !important;
+  white-space: nowrap !important;
+  border: 0 !important;
+}
+
+.legacy-layer-controls {
+  display: none !important;
+}
+
+.topbar-actions {
+  gap: 6px;
+}
+
+.topbar-link-button,
+.topbar-icon-link {
+  display: inline-flex;
+  min-height: 34px;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: 8px;
+  color: rgba(255, 255, 255, 0.9);
+  background: rgba(255, 255, 255, 0.07);
+  text-decoration: none;
+  transition: 150ms ease;
+}
+
+.topbar-link-button {
+  gap: 6px;
+  padding: 0 10px;
+  font: inherit;
+  font-size: 10px;
+  font-weight: 800;
+}
+
+.topbar-icon-link {
+  width: 34px;
+  padding: 0;
+}
+
+.topbar-link-button:hover,
+.topbar-icon-link:hover {
+  color: var(--yellow);
+  border-color: rgba(255, 255, 255, 0.38);
+  background: rgba(255, 255, 255, 0.13);
+}
+
+.topbar-link-button svg,
+.topbar-icon-link svg,
+.history-toolbar svg,
+.selected-layer-quick-actions svg,
+.layer-inline-button svg,
+.layer-entry-actions svg,
+.layer-inline-properties button svg {
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.8;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.history-toolbar {
+  position: sticky;
+  z-index: 8;
+  top: -16px;
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin: -16px -17px 17px;
+  padding: 11px 16px;
+  border-bottom: 1px solid #d4dbdd;
+  background: rgba(250, 251, 250, 0.97);
+  backdrop-filter: blur(10px);
+}
+
+.history-toolbar button {
+  display: flex;
+  min-width: 0;
+  min-height: 48px;
+  padding: 7px 10px;
+  align-items: center;
+  gap: 8px;
+  border: 1px solid #cfd8db;
+  border-radius: 10px;
+  color: #34464f;
+  background: #fff;
+  box-shadow: 0 2px 7px rgba(31, 48, 56, 0.06);
+  text-align: left;
+}
+
+.history-toolbar button:hover:not(:disabled) {
+  color: var(--blue);
+  border-color: #88bdd8;
+  background: #f1f9fd;
+}
+
+.history-toolbar button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+  box-shadow: none;
+}
+
+.history-toolbar button > span {
+  display: grid;
+  min-width: 0;
+  gap: 2px;
+}
+
+.history-toolbar strong {
+  font-size: 11px;
+  line-height: 1;
+}
+
+.history-toolbar small {
+  color: #8a969b;
+  font-size: 7px;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.selected-layer-heading {
+  display: flex;
+  min-width: 0;
+  margin-bottom: 16px;
+  padding-bottom: 14px;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #dfe4e5;
+}
+
+.selected-layer-preview {
+  display: grid;
+  width: 54px;
+  height: 54px;
+  flex: 0 0 auto;
+  place-items: center;
+  overflow: hidden;
+  border: 1px solid #d4dcde;
+  border-radius: 12px;
+  color: var(--blue);
+  background:
+    linear-gradient(45deg, #edf0f0 25%, transparent 25%) 0 0 / 10px 10px,
+    linear-gradient(-45deg, #edf0f0 25%, transparent 25%) 0 5px / 10px 10px,
+    #fff;
+  font-size: 20px;
+  font-weight: 900;
+}
+
+.selected-layer-preview img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+}
+
+.selected-layer-heading > span:last-child {
+  min-width: 0;
+}
+
+.selected-layer-heading small {
+  display: block;
+  margin-bottom: 4px;
+  color: #89969b;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.selected-layer-heading h2 {
+  overflow: hidden;
+  color: #273941;
+  font-size: 17px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-layer-quick-actions {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  margin-bottom: 18px;
+}
+
+.selected-layer-quick-actions button {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border: 1px solid #d3dcde;
+  border-radius: 9px;
+  color: #53656d;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.selected-layer-quick-actions button:hover {
+  color: var(--blue);
+  border-color: #9fc9df;
+}
+
+.selected-layer-position-grid {
+  gap: 10px;
+}
+
+.selected-layer-footer-actions {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+  margin-top: 19px;
+  padding-top: 14px;
+  border-top: 1px solid #dfe4e5;
+}
+
+.selected-layer-footer-actions button {
+  min-height: 40px;
+  padding: 0 10px;
+  border: 1px solid #d2dbdd;
+  border-radius: 9px;
+  color: #53646c;
+  background: #fff;
+  font: inherit;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.selected-layer-footer-actions .danger {
+  color: #b7473d;
+  border-color: #e8c1bc;
+  background: #fff8f7;
+}
+
+.text-layer-field {
+  padding: 10px;
+  border: 1px solid #dbe2e3;
+  border-radius: 12px;
+  background: #f8faf9;
+  transition: 150ms ease;
+}
+
+.text-layer-field-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.text-layer-toggle {
+  display: flex;
+  min-width: 0;
+  padding: 0;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  color: #7d8a90;
+  background: transparent;
+  text-align: left;
+}
+
+.text-layer-toggle-index {
+  display: grid;
+  width: 28px;
+  height: 28px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 8px;
+  color: #7a888e;
+  background: #e6ebeb;
+  font-size: 10px;
+  font-weight: 900;
+}
+
+.text-layer-toggle-index.wide {
+  font-size: 8px;
+}
+
+.text-layer-toggle > span:last-child {
+  display: grid;
+  gap: 2px;
+}
+
+.text-layer-toggle strong {
+  color: #485960;
+  font-size: 10px;
+}
+
+.text-layer-toggle b {
+  color: #9aa5a9;
+  font-size: 7px;
+}
+
+.text-layer-toggle.active .text-layer-toggle-index {
+  color: #fff;
+  background: var(--blue);
+}
+
+.text-layer-toggle.active b {
+  color: #3a8eb9;
+}
+
+.text-layer-field-heading output {
+  min-width: 28px;
+  color: #8d9a9f;
+  font-size: 9px;
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+}
+
+.text-layer-field.is-disabled {
+  border-style: dashed;
+  background: #f2f4f4;
+}
+
+.text-layer-field.is-disabled > input {
+  color: #9aa4a8;
+  background: #e9eded;
+}
+
+.layer-item {
+  grid-template-columns: 18px 38px minmax(0, 1fr) 32px 32px;
+  gap: 7px;
+  min-height: 66px;
+  padding: 8px 7px;
+  border-radius: 11px;
+}
+
+.layer-drag-handle {
+  font-size: 16px;
+}
+
+.layer-thumbnail {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.layer-copy strong {
+  font-size: 11px;
+}
+
+.layer-copy small {
+  margin-top: 3px;
+  font-size: 8px;
+}
+
+.layer-inline-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.layer-inline-button svg,
+.layer-entry-actions svg {
+  width: 19px;
+  height: 19px;
+}
+
+.layer-entry-actions {
+  grid-column: 2 / -1;
+  gap: 6px;
+}
+
+.layer-entry-actions button {
+  display: grid;
+  width: 32px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.layer-entry-actions button.danger {
+  color: #b74a40;
+  border-color: #e8c3be;
+  background: #fff9f8;
+}
+
+.layer-inline-properties {
+  display: none;
+}
+
+.official-assets-summary strong {
+  font-size: 12px;
+}
+
+.official-assets-summary small,
+.official-assets-hint {
+  font-size: 9px;
+}
+
+.asset-category-tabs button {
+  min-height: 35px;
+  font-size: 9px;
+}
+
+.official-asset-grid {
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 8px;
+  max-height: 370px;
+}
+
+.official-asset-button {
+  padding: 6px;
+  border-radius: 11px;
+  font-size: 9px;
+}
+
+.official-asset-button > span:last-child {
+  padding-top: 6px;
+}
+
+.about-dialog {
+  position: fixed;
+  z-index: 1000;
+  inset: 0;
+  display: grid;
+  padding: 20px;
+  place-items: center;
+}
+
+.about-dialog[hidden] {
+  display: none;
+}
+
+.about-dialog-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  background: rgba(15, 25, 30, 0.62);
+  backdrop-filter: blur(7px);
+}
+
+.about-card {
+  position: relative;
+  z-index: 1;
+  width: min(430px, 100%);
+  padding: 28px;
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  border-radius: 20px;
+  color: #384a52;
+  background: #fff;
+  box-shadow: 0 25px 70px rgba(11, 24, 30, 0.3);
+}
+
+.about-card > img {
+  display: block;
+  width: 58px;
+  height: 58px;
+  margin-bottom: 14px;
+}
+
+.about-card > small {
+  color: #8d999e;
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.18em;
+}
+
+.about-card h2 {
+  margin: 5px 38px 19px 0;
+  color: #243840;
+  font-size: 20px;
+  line-height: 1.3;
+}
+
+.about-close-button {
+  position: absolute;
+  top: 15px;
+  right: 15px;
+  display: grid;
+  width: 36px;
+  height: 36px;
+  padding: 0;
+  place-items: center;
+  border: 1px solid #d8dfe1;
+  border-radius: 10px;
+  color: #65747a;
+  background: #f5f7f7;
+  font-size: 20px;
+}
+
+.about-card dl {
+  display: grid;
+  gap: 0;
+  margin: 0;
+  border-top: 1px solid #e0e5e6;
+}
+
+.about-card dl > div {
+  display: grid;
+  grid-template-columns: 78px minmax(0, 1fr);
+  gap: 12px;
+  padding: 11px 0;
+  border-bottom: 1px solid #e6eaeb;
+}
+
+.about-card dt {
+  color: #8b979c;
+  font-size: 9px;
+  font-weight: 800;
+}
+
+.about-card dd {
+  margin: 0;
+  color: #43555d;
+  font-size: 10px;
+  font-weight: 700;
+  line-height: 1.55;
+}
+
+@media (min-width: 1181px) {
+  .workspace {
+    grid-template-columns: 276px minmax(360px, 1fr) 360px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 238px minmax(330px, 1fr) 330px;
+  }
+}
+
+@media (max-width: 900px) {
+  .history-toolbar {
+    top: -12px;
+    margin: -12px -12px 14px;
+    padding: 9px 12px;
+  }
+
+  .official-asset-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+    max-height: none;
+    overflow: visible;
+    overscroll-behavior: auto;
+  }
+
+  .layer-item {
+    flex: 0 0 auto;
+  }
+
+  .layer-drag-handle {
+    color: #c2c9cb;
+    cursor: default;
+  }
+
+  .layer-inline-properties {
+    display: grid;
+    grid-column: 1 / -1;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+    gap: 9px;
+    margin: 4px -1px -1px;
+    padding: 12px;
+    border-top: 1px solid #c9dfe9;
+    border-radius: 0 0 9px 9px;
+    background: rgba(255, 255, 255, 0.72);
+  }
+
+  .layer-inline-properties label {
+    display: grid;
+    min-width: 0;
+    gap: 7px;
+  }
+
+  .layer-inline-properties label.wide,
+  .layer-inline-properties > button {
+    grid-column: 1 / -1;
+  }
+
+  .layer-inline-properties label > span {
+    display: flex;
+    justify-content: space-between;
+    color: #5c6d74;
+    font-size: 10px;
+    font-weight: 800;
+  }
+
+  .layer-inline-properties output {
+    color: var(--blue);
+    font-variant-numeric: tabular-nums;
+  }
+
+  .layer-inline-properties input[type="range"] {
+    height: 5px;
+    margin: 7px 0;
+  }
+
+  .layer-inline-properties > button {
+    display: flex;
+    min-height: 38px;
+    align-items: center;
+    justify-content: center;
+    gap: 7px;
+    border: 1px solid #cfdbde;
+    border-radius: 9px;
+    color: #53656d;
+    background: #fff;
+    font: inherit;
+    font-size: 9px;
+    font-weight: 800;
+  }
+
+  .layer-item.is-expanded {
+    border-color: #5aa9d7;
+    background: #edf8fe;
+  }
+}
+
+@media (max-width: 560px) {
+  .topbar-actions {
+    gap: 4px;
+  }
+
+  .topbar-link-button,
+  .topbar-icon-link,
+  .cache-refresh-button {
+    width: 32px;
+    min-width: 32px;
+    min-height: 32px;
+    padding: 0;
+  }
+
+  .topbar-link-button > span,
+  #cacheRefreshLabel {
+    display: none;
+  }
+
+  .brand {
+    min-width: 0;
+  }
+
+  .brand strong {
+    max-width: 150px;
+  }
+
+  .history-toolbar button {
+    min-height: 45px;
+  }
+
+  .layer-item {
+    grid-template-columns: 16px 40px minmax(0, 1fr) 34px 34px;
+    min-height: 69px;
+  }
+
+  .layer-thumbnail {
+    width: 40px;
+    height: 40px;
+  }
+
+  .layer-inline-button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .layer-entry-actions button {
+    width: 34px;
+    min-width: 34px;
+    height: 32px;
+  }
+
+  .about-card {
+    padding: 24px 20px 20px;
+  }
+}
+
+@media (max-width: 380px) {
+  .brand strong {
+    max-width: 105px;
+    font-size: 10px;
+  }
+
+  .history-toolbar small {
+    display: none;
+  }
+}
+
 @keyframes save-assist-mobile-enter {
   from {
     opacity: 0;
@@ -4201,5 +4890,102 @@ body::before {
 
   .quick-color-row button {
     aspect-ratio: 1.6;
+  }
+}
+
+/* Final layer sizing overrides: keep controls readable after legacy layout rules. */
+.layer-item {
+  grid-template-columns: 18px 38px minmax(0, 1fr) 32px 32px;
+  gap: 7px;
+  min-height: 66px;
+  padding: 8px 7px;
+  border-radius: 11px;
+}
+
+.layer-drag-handle {
+  font-size: 16px;
+}
+
+.layer-thumbnail {
+  width: 38px;
+  height: 38px;
+  border-radius: 8px;
+  font-size: 15px;
+}
+
+.layer-copy strong {
+  font-size: 11px;
+}
+
+.layer-copy small {
+  margin-top: 3px;
+  font-size: 8px;
+}
+
+.layer-inline-button {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+}
+
+.layer-entry-actions {
+  grid-column: 2 / -1;
+  gap: 6px;
+}
+
+.layer-entry-actions button {
+  display: grid;
+  width: 32px;
+  min-width: 32px;
+  height: 30px;
+  padding: 0;
+  place-items: center;
+  border-radius: 8px;
+}
+
+.layer-inline-button svg,
+.layer-entry-actions svg {
+  width: 19px;
+  height: 19px;
+}
+
+.layer-entry-actions button.danger {
+  color: #b74a40;
+  border-color: #e8c3be;
+  background: #fff9f8;
+}
+
+@media (min-width: 1181px) {
+  .workspace {
+    grid-template-columns: 276px minmax(360px, 1fr) 360px;
+  }
+}
+
+@media (min-width: 901px) and (max-width: 1180px) {
+  .workspace {
+    grid-template-columns: 238px minmax(330px, 1fr) 330px;
+  }
+}
+
+@media (max-width: 560px) {
+  .layer-item {
+    grid-template-columns: 16px 40px minmax(0, 1fr) 34px 34px;
+    min-height: 69px;
+  }
+
+  .layer-thumbnail {
+    width: 40px;
+    height: 40px;
+  }
+
+  .layer-inline-button {
+    width: 34px;
+    height: 34px;
+  }
+
+  .layer-entry-actions button {
+    width: 34px;
+    min-width: 34px;
+    height: 32px;
   }
 }

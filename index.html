@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=22" />
+    <link rel="stylesheet" href="./styles.css?v=23" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -51,6 +51,26 @@
           </span>
         </a>
         <div class="topbar-actions">
+          <button class="topbar-link-button" id="aboutButton" type="button">
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <circle cx="12" cy="12" r="9"></circle>
+              <path d="M12 10.5v6"></path>
+              <circle cx="12" cy="7.3" r=".8" fill="currentColor" stroke="none"></circle>
+            </svg>
+            <span>关于</span>
+          </button>
+          <a
+            class="topbar-icon-link"
+            href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
+            target="_blank"
+            rel="noopener noreferrer"
+            aria-label="在 GitHub 查看源码（新窗口打开）"
+            title="GitHub"
+          >
+            <svg viewBox="0 0 24 24" aria-hidden="true">
+              <path d="M12 2.7a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.8c-2.9.6-3.5-1.2-3.5-1.2-.5-1.2-1.2-1.5-1.2-1.5-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 1.7 2.5 1.2 3.1.9.1-.7.4-1.2.7-1.5-2.3-.3-4.7-1.2-4.7-5.3 0-1.2.4-2.1 1.1-2.9-.1-.3-.5-1.4.1-2.8 0 0 .9-.3 3.1 1.1a10.5 10.5 0 0 1 5.6 0c2.1-1.4 3-1.1 3-1.1.6 1.4.2 2.5.1 2.8.7.8 1.1 1.7 1.1 2.9 0 4.1-2.4 5-4.7 5.3.4.3.7 1 .7 2v3c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.7Z" fill="currentColor" stroke="none"></path>
+            </svg>
+          </a>
           <button
             class="cache-refresh-button"
             id="cacheRefreshButton"
@@ -158,13 +178,84 @@
         </nav>
 
         <aside class="control-panel" aria-label="编辑属性">
-          <div class="inspector-heading">
-            <span>
-              <small>PROPERTIES</small>
-              <strong>属性</strong>
-            </span>
-            <span id="activeLayerSummary">花式文字</span>
+          <div class="history-toolbar" aria-label="编辑历史">
+            <button id="undoButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 7-5 5 5 5"></path>
+                <path d="M5 12h8.5a5.5 5.5 0 0 1 5.5 5.5"></path>
+              </svg>
+              <span><strong>撤回</strong><small>Ctrl Z</small></span>
+            </button>
+            <button id="redoButton" type="button" disabled>
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 7 5 5-5 5"></path>
+                <path d="M19 12h-8.5A5.5 5.5 0 0 0 5 17.5"></path>
+              </svg>
+              <span><strong>重做</strong><small>Ctrl Shift Z</small></span>
+            </button>
           </div>
+          <span class="visually-hidden" id="activeLayerSummary" aria-live="polite">第一行中文</span>
+
+          <section
+            class="control-section layer-properties-section"
+            id="layerPropertiesSection"
+            data-editor-panel="properties"
+            hidden
+          >
+            <div class="selected-layer-heading">
+              <span class="selected-layer-preview" id="selectedLayerPreview" aria-hidden="true">1</span>
+              <span>
+                <small id="selectedLayerType">中文文字图层</small>
+                <h2 id="selectedLayerName">第一行中文</h2>
+              </span>
+            </div>
+
+            <div class="selected-layer-quick-actions">
+              <button id="selectedLayerVisibilityButton" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M2.5 12s3.5-6 9.5-6 9.5 6 9.5 6-3.5 6-9.5 6-9.5-6-9.5-6Z"></path>
+                  <circle cx="12" cy="12" r="2.5"></circle>
+                </svg>
+                <span>隐藏图层</span>
+              </button>
+              <button id="selectedLayerLockButton" type="button">
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <rect x="5" y="10" width="14" height="10" rx="2"></rect>
+                  <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
+                </svg>
+                <span>锁定图层</span>
+              </button>
+            </div>
+
+            <label class="range-field selected-layer-range">
+              <span><span>大小</span><output id="selectedLayerScaleValue">100%</output></span>
+              <input id="selectedLayerScale" type="range" min="5" max="240" step="1" value="100" />
+            </label>
+            <div class="two-column selected-layer-position-grid">
+              <label class="range-field compact-range">
+                <span><span>左右位置</span><output id="selectedLayerXValue">50%</output></span>
+                <input id="selectedLayerX" type="range" min="0" max="100" step="1" value="50" />
+              </label>
+              <label class="range-field compact-range">
+                <span><span>上下位置</span><output id="selectedLayerYValue">36%</output></span>
+                <input id="selectedLayerY" type="range" min="0" max="100" step="1" value="36" />
+              </label>
+            </div>
+            <div class="two-column selected-layer-position-grid">
+              <label class="range-field compact-range">
+                <span><span>旋转</span><output id="selectedLayerRotationValue">0°</output></span>
+                <input id="selectedLayerRotation" type="range" min="-180" max="180" step="1" value="0" />
+              </label>
+              <label class="range-field compact-range">
+                <span><span>透明度</span><output id="selectedLayerOpacityValue">100%</output></span>
+                <input id="selectedLayerOpacity" type="range" min="0" max="100" step="1" value="100" />
+              </label>
+            </div>
+            <div class="selected-layer-footer-actions">
+              <button id="selectedLayerResetButton" type="button">恢复默认位置</button>
+              <button class="danger" id="selectedLayerDeleteButton" type="button">停用文字图层</button>
+            </div>
+          </section>
 
           <section
             class="control-section first-section"
@@ -181,26 +272,45 @@
               </button>
             </div>
 
-            <label class="field">
-              <span>第一行 <output id="line1Count">7</output></span>
-              <input id="line1" type="text" value="直到群友变成" autocomplete="off" />
-            </label>
+            <div class="field text-layer-field" data-text-layer-field="text-line-1">
+              <div class="text-layer-field-heading">
+                <button class="text-layer-toggle active" type="button" data-text-layer-toggle="text-line-1" aria-pressed="true">
+                  <span class="text-layer-toggle-index" aria-hidden="true">1</span>
+                  <span><strong>第一行中文</strong><b>已启用</b></span>
+                </button>
+                <output id="line1Count">7</output>
+              </div>
+              <input id="line1" type="text" value="直到群友变成" autocomplete="off" aria-label="第一行中文" />
+            </div>
 
-            <label class="field">
-              <span>第二行 <output id="line2Count">4</output></span>
-              <input id="line2" type="text" value="一只小猪" autocomplete="off" />
-            </label>
+            <div class="field text-layer-field" data-text-layer-field="text-line-2">
+              <div class="text-layer-field-heading">
+                <button class="text-layer-toggle active" type="button" data-text-layer-toggle="text-line-2" aria-pressed="true">
+                  <span class="text-layer-toggle-index" aria-hidden="true">2</span>
+                  <span><strong>第二行中文</strong><b>已启用</b></span>
+                </button>
+                <output id="line2Count">4</output>
+              </div>
+              <input id="line2" type="text" value="一只小猪" autocomplete="off" aria-label="第二行中文" />
+            </div>
 
-            <label class="field">
-              <span>英文小字 <output id="subtitleCount">36</output></span>
+            <div class="field text-layer-field" data-text-layer-field="text-subtitle">
+              <div class="text-layer-field-heading">
+                <button class="text-layer-toggle active" type="button" data-text-layer-toggle="text-subtitle" aria-pressed="true">
+                  <span class="text-layer-toggle-index wide" aria-hidden="true">EN</span>
+                  <span><strong>英文小字</strong><b>已启用</b></span>
+                </button>
+                <output id="subtitleCount">36</output>
+              </div>
               <input
                 id="subtitle"
                 type="text"
                 value="Till We All Turn into Little Piggies"
                 autocomplete="off"
                 spellcheck="false"
+                aria-label="英文小字"
               />
-            </label>
+            </div>
 
             <div class="example-row" aria-label="示例文案">
               <span>换个灵感</span>
@@ -275,7 +385,7 @@
               </button>
             </div>
 
-            <details class="artwork-transform">
+            <details class="artwork-transform legacy-layer-controls">
               <summary class="precision-summary">
                 <span>选中文字图层微调</span>
                 <span class="precision-chevron" aria-hidden="true">⌄</span>
@@ -512,7 +622,7 @@
               <h2 id="imageLayerTitle">添加图层</h2>
               <button
                 id="overlayLockButton"
-                class="layer-lock-button"
+                class="layer-lock-button legacy-layer-controls"
                 type="button"
                 aria-label="上传图片后可锁定"
                 aria-pressed="true"
@@ -555,13 +665,13 @@
                   <span aria-hidden="true">＋</span>
                   选择图片（可多选）
                 </label>
-                <button id="removeOverlayButton" class="remove-layer-button" type="button" disabled>
+                <button id="removeOverlayButton" class="remove-layer-button legacy-layer-controls" type="button" disabled>
                   删除选中
                 </button>
               </div>
             </div>
 
-            <div class="overlay-file-card" id="overlayFileCard" aria-live="polite">
+            <div class="overlay-file-card legacy-layer-controls" id="overlayFileCard" aria-live="polite">
               <div class="overlay-thumbnail-wrap">
                 <img id="overlayThumbnail" alt="已添加图片的缩略图" hidden />
                 <span id="overlayPlaceholder" aria-hidden="true">◇</span>
@@ -572,7 +682,7 @@
               </span>
             </div>
 
-            <details class="overlay-controls precision-disclosure" id="overlayControls" hidden>
+            <details class="overlay-controls precision-disclosure legacy-layer-controls" id="overlayControls" hidden>
               <summary class="precision-summary">
                 <span>图片精确微调</span>
                 <span class="precision-chevron" aria-hidden="true">⌄</span>
@@ -613,7 +723,7 @@
               </div>
             </details>
 
-            <p class="overlay-hint" id="overlayHint">选择任意图片图层后，可在画布中直接移动、缩放和旋转。</p>
+            <p class="overlay-hint legacy-layer-controls" id="overlayHint">选择任意图片图层后，可在画布中直接移动、缩放和旋转。</p>
           </section>
 
           <section
@@ -706,19 +816,6 @@
             </div>
           </div>
 
-          <div class="canvas-text-layer-switches" role="group" aria-label="启用或停用文字图层">
-            <span>文字图层</span>
-            <button class="active" type="button" data-text-layer-toggle="text-line-1" aria-pressed="true">
-              <i aria-hidden="true">1</i><span>第一行</span><b>已启用</b>
-            </button>
-            <button class="active" type="button" data-text-layer-toggle="text-line-2" aria-pressed="true">
-              <i aria-hidden="true">2</i><span>第二行</span><b>已启用</b>
-            </button>
-            <button class="active" type="button" data-text-layer-toggle="text-subtitle" aria-pressed="true">
-              <i aria-hidden="true">EN</i><span>英文</span><b>已启用</b>
-            </button>
-          </div>
-
           <div class="canvas-stage" id="canvasStage">
             <div class="canvas-frame checker" id="canvasFrame">
               <canvas
@@ -748,25 +845,22 @@
         </section>
       </main>
 
-      <footer class="site-footer">
-        <p class="asset-credit">
-          素材来源：《明日方舟》官方 · 相关素材版权归《明日方舟》及其权利人所有
-        </p>
-        <p class="analytics-credit">
-          使用 Cloudflare Web Analytics 进行匿名访问与性能统计
-        </p>
-        <a
-          class="github-link"
-          href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
-          target="_blank"
-          rel="noopener noreferrer"
-          aria-label="在 GitHub 查看这片大地字体包源码（新窗口打开）"
-        >
-          <span class="github-badge" aria-hidden="true">GH</span>
-          <span>在 GitHub 查看源码</span>
-          <span class="github-arrow" aria-hidden="true">↗</span>
-        </a>
-      </footer>
+    </div>
+
+    <div class="about-dialog" id="aboutDialog" hidden>
+      <button class="about-dialog-backdrop" id="aboutBackdrop" type="button" aria-label="关闭关于"></button>
+      <section class="about-card" role="dialog" aria-modal="true" aria-labelledby="aboutTitle">
+        <button class="about-close-button" id="aboutCloseButton" type="button" aria-label="关闭关于">×</button>
+        <img src="./assets/orange-icon.svg?v=1" alt="" />
+        <small>ABOUT</small>
+        <h2 id="aboutTitle">直到大地变成一颗酸橙</h2>
+        <dl>
+          <div><dt>制作人</dt><dd>Minecrash</dd></div>
+          <div><dt>素材来源</dt><dd>《明日方舟》官方</dd></div>
+          <div><dt>版权说明</dt><dd>相关素材版权归《明日方舟》及其权利人所有</dd></div>
+          <div><dt>访问统计</dt><dd>Cloudflare Web Analytics 匿名访问与性能统计</dd></div>
+        </dl>
+      </section>
     </div>
 
     <div class="save-assist" id="saveAssist" hidden>
@@ -845,7 +939,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=27"></script>
+    <script src="./app.js?v=28"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

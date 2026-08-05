@@ -23,9 +23,30 @@
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="./styles.css?v=12" />
+    <link rel="stylesheet" href="./styles.css?v=13" />
   </head>
   <body>
+    <div class="font-loading-popover" id="fontLoadingPopover">
+      <div class="font-loading-copy">
+        <span class="font-loading-sparkle" aria-hidden="true">✦</span>
+        <span>
+          <span id="fontLoadingLabel">大地加载中~</span>
+          <strong id="fontLoadingPercent">0%</strong>
+        </span>
+      </div>
+      <div
+        class="font-loading-track"
+        id="fontLoadingTrack"
+        role="progressbar"
+        aria-label="大地字体资源加载进度"
+        aria-valuemin="0"
+        aria-valuemax="100"
+        aria-valuenow="0"
+      >
+        <span class="font-loading-bar" id="fontLoadingBar"></span>
+      </div>
+    </div>
+
     <div class="app-shell">
       <header class="topbar">
         <a class="brand" href="#" aria-label="直到大地变成一颗酸橙首页">
@@ -420,6 +441,7 @@
                 id="logoCanvas"
                 width="1600"
                 height="743"
+                aria-busy="true"
                 role="img"
                 aria-label="当前字标作品"
               ></canvas>
@@ -470,7 +492,7 @@
 
     <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
-    <script src="./style-engine.js?v=3"></script>
-    <script src="./app.js?v=18"></script>
+    <script src="./style-engine.js?v=4"></script>
+    <script src="./app.js?v=19"></script>
   </body>
 </html>

@@ -40,30 +40,115 @@
     return templates[style] || templates.playful || null;
   }
 
-  function loadFont(key, url) {
-    return fetch(url)
-      .then(function (response) {
-        if (!response.ok) {
-          throw new Error("Unable to load font: " + url);
-        }
-        return response.arrayBuffer();
-      })
-      .then(function (buffer) {
-        fonts[key] = global.opentype.parse(buffer);
-        return fonts[key];
-      });
+  function notifyProgress(callback, value) {
+    if (typeof callback !== "function") {
+      return;
+    }
+    try {
+      callback(clamp(value, 0, 1));
+    } catch (error) {
+      console.warn("Unable to report lettering load progress.", error);
+    }
   }
 
-  function loadAtlas(url) {
-    if (!url) {
-      return Promise.resolve();
+  function createProgressReporter(resourceIds, callback) {
+    var values = Object.create(null);
+    resourceIds.forEach(function (resourceId) {
+      values[resourceId] = 0;
+    });
+    notifyProgress(callback, resourceIds.length ? 0 : 1);
+
+    return function (resourceId, loaded, total, complete) {
+      var portion = complete
+        ? 1
+        : total > 0
+          ? clamp(loaded / total, 0, 1)
+          : values[resourceId] || 0;
+      values[resourceId] = Math.max(values[resourceId] || 0, portion);
+      var combined = resourceIds.reduce(function (sum, id) {
+        return sum + values[id];
+      }, 0);
+      notifyProgress(
+        callback,
+        resourceIds.length ? combined / resourceIds.length : 1
+      );
+    };
+  }
+
+  function loadArrayBuffer(url, errorPrefix, onProgress) {
+    return fetch(url).then(function (response) {
+      if (!response.ok) {
+        throw new Error(errorPrefix + url);
+      }
+
+      var total = Number(response.headers.get("content-length")) || 0;
+      onProgress(0, total, false);
+      if (!response.body || typeof response.body.getReader !== "function") {
+        return response.arrayBuffer().then(function (buffer) {
+          onProgress(buffer.byteLength, total || buffer.byteLength, true);
+          return buffer;
+        });
+      }
+
+      var reader = response.body.getReader();
+      var chunks = [];
+      var loaded = 0;
+
+      function readNextChunk() {
+        return reader.read().then(function (result) {
+          if (result.done) {
+            var joined = new Uint8Array(loaded);
+            var offset = 0;
+            chunks.forEach(function (chunk) {
+              joined.set(chunk, offset);
+              offset += chunk.byteLength;
+            });
+            onProgress(loaded, total || loaded, true);
+            return joined.buffer;
+          }
+          chunks.push(result.value);
+          loaded += result.value.byteLength;
+          onProgress(loaded, total, false);
+          return readNextChunk();
+        });
+      }
+
+      return readNextChunk();
+    });
+  }
+
+  function loadFont(key, url, onProgress) {
+    return loadArrayBuffer(url, "Unable to load font: ", onProgress).then(
+      function (buffer) {
+        fonts[key] = global.opentype.parse(buffer);
+        return fonts[key];
+      }
+    );
+  }
+
+  function decodeUtf8(buffer) {
+    if (typeof global.TextDecoder === "function") {
+      return new global.TextDecoder("utf-8").decode(buffer);
     }
-    return fetch(url)
-      .then(function (response) {
-        if (!response.ok) {
-          throw new Error("Unable to load glyph atlas: " + url);
-        }
-        return response.json();
+    var bytes = new Uint8Array(buffer);
+    var binary = "";
+    for (var offset = 0; offset < bytes.length; offset += 32768) {
+      binary += String.fromCharCode.apply(
+        null,
+        bytes.subarray(offset, offset + 32768)
+      );
+    }
+    return decodeURIComponent(global.escape(binary));
+  }
+
+  function loadAtlas(url, onProgress) {
+    return loadArrayBuffer(
+      url,
+      "Unable to load glyph atlas: ",
+      onProgress
+    )
+      .then(function (buffer) {
+        return JSON.parse(decodeUtf8(buffer));
       })
       .then(function (manifest) {
         var source = manifest.glyphs || manifest;
@@ -78,20 +163,41 @@
       });
   }
 
-  function init(manifest, atlasUrl) {
+  function init(manifest, atlasUrl, onProgress) {
     if (readyPromise) {
+      if (ready) {
+        notifyProgress(onProgress, 1);
+      }
       return readyPromise;
     }
     if (!global.opentype) {
       readyPromise = Promise.reject(new Error("opentype.js is not available"));
       return readyPromise;
     }
-    var fontPromises = Object.keys(manifest).map(function (key) {
-        return loadFont(key, manifest[key]);
+
+    var fontKeys = Object.keys(manifest);
+    var resourceIds = fontKeys.map(function (key) {
+      return "font:" + key;
+    });
+    if (atlasUrl) {
+      resourceIds.push("atlas");
+    }
+    var report = createProgressReporter(resourceIds, onProgress);
+    var fontPromises = fontKeys.map(function (key) {
+      return loadFont(key, manifest[key], function (loaded, total, complete) {
+        report("font:" + key, loaded, total, complete);
       });
-    fontPromises.push(loadAtlas(atlasUrl));
+    });
+    if (atlasUrl) {
+      fontPromises.push(
+        loadAtlas(atlasUrl, function (loaded, total, complete) {
+          report("atlas", loaded, total, complete);
+        })
+      );
+    }
     readyPromise = Promise.all(fontPromises).then(function () {
       ready = true;
+      notifyProgress(onProgress, 1);
       return api;
     });
     return readyPromise;
@@ -608,8 +714,10 @@
     var pending = Object.keys(atlasLoading).map(function (key) {
       return atlasLoading[key];
     });
-    return Promise.all(pending).then(function () {
-      return undefined;
+    return Promise.all(pending).then(function (images) {
+      return images.every(function (image) {
+        return Boolean(image);
+      });
     });
   }
 

@@ -55,6 +55,9 @@
   var lastPreviewResult = null;
   var canvasStageResizeObserver = null;
   var localAssetDbPromise = null;
+  var fontLoadingPercent = 0;
+  var fontLoadingHideTimer = 0;
+  var initialFontLoadingError = null;
 
   var elements = {
     canvas: document.getElementById("logoCanvas"),
@@ -139,7 +142,12 @@
     resetButton: document.getElementById("resetButton"),
     shuffleButton: document.getElementById("shuffleButton"),
     toast: document.getElementById("toast"),
-    toastText: document.getElementById("toastText")
+    toastText: document.getElementById("toastText"),
+    fontLoadingPopover: document.getElementById("fontLoadingPopover"),
+    fontLoadingLabel: document.getElementById("fontLoadingLabel"),
+    fontLoadingPercent: document.getElementById("fontLoadingPercent"),
+    fontLoadingTrack: document.getElementById("fontLoadingTrack"),
+    fontLoadingBar: document.getElementById("fontLoadingBar")
   };
 
   var examples = [
@@ -177,6 +185,118 @@
 
   function graphemeCount(text) {
     return splitGraphemes(text).length;
+  }
+
+  function setFontLoadingProgress(value) {
+    if (
+      !elements.fontLoadingPopover ||
+      elements.fontLoadingPopover.classList.contains("is-error")
+    ) {
+      return;
+    }
+    var next = Math.round(clamp(Number(value) || 0, 0, 100));
+    next = Math.max(fontLoadingPercent, next);
+    if (next === fontLoadingPercent && next !== 0) {
+      return;
+    }
+    fontLoadingPercent = next;
+    elements.fontLoadingPercent.textContent = next + "%";
+    elements.fontLoadingBar.style.width = next + "%";
+    elements.fontLoadingTrack.setAttribute("aria-valuenow", String(next));
+    elements.fontLoadingTrack.setAttribute(
+      "aria-valuetext",
+      "大地加载中 " + next + "%"
+    );
+  }
+
+  function showFontLoadingError(error) {
+    if (!elements.fontLoadingPopover) {
+      return;
+    }
+    initialFontLoadingError = initialFontLoadingError || error || new Error(
+      "Unable to load lettering resources"
+    );
+    window.clearTimeout(fontLoadingHideTimer);
+    elements.fontLoadingLabel.textContent = "字体加载失败，请刷新重试";
+    elements.fontLoadingPercent.textContent = "";
+    elements.fontLoadingPopover.classList.remove("is-complete", "is-hidden");
+    elements.fontLoadingPopover.classList.add("is-error");
+    elements.fontLoadingTrack.setAttribute(
+      "aria-valuetext",
+      "字体加载失败，请刷新重试"
+    );
+    elements.canvas.removeAttribute("aria-busy");
+  }
+
+  function finishFontLoading() {
+    if (
+      !elements.fontLoadingPopover ||
+      initialFontLoadingError ||
+      elements.fontLoadingPopover.classList.contains("is-complete")
+    ) {
+      return;
+    }
+    window.clearTimeout(fontLoadingHideTimer);
+    setFontLoadingProgress(100);
+    elements.fontLoadingLabel.textContent = "大地加载完成~";
+    elements.fontLoadingPopover.classList.add("is-complete");
+    elements.fontLoadingTrack.setAttribute(
+      "aria-valuetext",
+      "大地字体资源加载完成"
+    );
+    elements.canvas.removeAttribute("aria-busy");
+    fontLoadingHideTimer = window.setTimeout(function () {
+      elements.fontLoadingPopover.classList.add("is-hidden");
+      elements.fontLoadingPopover.setAttribute("aria-hidden", "true");
+    }, 900);
+  }
+
+  function finishInitialFontLoading() {
+    Promise.all([
+      vectorEngineReady || Promise.resolve(null),
+      logoFontsReady || Promise.resolve(null)
+    ])
+      .then(function () {
+        if (
+          initialFontLoadingError ||
+          !styleEngine ||
+          !styleEngine.isReady()
+        ) {
+          showFontLoadingError(initialFontLoadingError);
+          return false;
+        }
+
+        setFontLoadingProgress(96);
+        return new Promise(function (resolve, reject) {
+          scheduleRender();
+          requestAnimationFrame(function () {
+            if (!styleEngine.whenAtlasReady) {
+              resolve(true);
+              return;
+            }
+            styleEngine.whenAtlasReady().then(function (loaded) {
+              if (loaded === false) {
+                reject(new Error("Unable to load initial atlas glyphs"));
+                return;
+              }
+              resolve(true);
+            }, reject);
+          });
+        });
+      })
+      .then(function (readyToShow) {
+        if (!readyToShow) {
+          return;
+        }
+        setFontLoadingProgress(99);
+        scheduleRender();
+        requestAnimationFrame(finishFontLoading);
+        window.setTimeout(finishFontLoading, 250);
+      })
+      .catch(function (error) {
+        console.warn("Lettering resources did not finish loading.", error);
+        showFontLoadingError(error);
+      });
   }
 
   function dimensionsFromValue(value) {
@@ -2927,14 +3047,19 @@
         kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
         kalam: "./assets/fonts/Kalam-Bold.ttf",
         princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-      }, "./assets/font-atlas/runtime-glyph-index.json?v=3")
+      }, "./assets/font-atlas/runtime-glyph-index.json?v=3", function (progress) {
+        setFontLoadingProgress(progress * 92);
+      })
       .then(function () {
         scheduleRender();
       })
       .catch(function (error) {
         console.warn("Vector lettering engine unavailable; using canvas fonts.", error);
+        showFontLoadingError(error);
         return null;
       });
+  } else {
+    showFontLoadingError(new Error("Lettering style engine is unavailable"));
   }
 
   if ("scrollRestoration" in window.history) {
@@ -2966,10 +3091,26 @@
         '700 120px "LogoHandEN"',
         "STAY CURIOUS KEEP CREATING"
       )
-    ]).then(function () {
-      scheduleRender();
-    });
+    ])
+      .then(function (loadedFonts) {
+        scheduleRender();
+        return loadedFonts;
+      })
+      .catch(function (error) {
+        console.warn("Canvas lettering fonts unavailable.", error);
+        showFontLoadingError(error);
+        return null;
+      });
   } else if (document.fonts && document.fonts.ready) {
-    logoFontsReady = document.fonts.ready.then(scheduleRender);
+    logoFontsReady = document.fonts.ready
+      .then(function () {
+        scheduleRender();
+      })
+      .catch(function (error) {
+        console.warn("Canvas lettering fonts unavailable.", error);
+        showFontLoadingError(error);
+        return null;
+      });
   }
+  finishInitialFontLoading();
 })();

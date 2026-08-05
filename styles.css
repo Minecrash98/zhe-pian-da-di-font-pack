@@ -89,6 +89,100 @@ body::before {
   pointer-events: none;
 }
 
+.font-loading-popover {
+  position: fixed;
+  z-index: 50;
+  top: calc(env(safe-area-inset-top, 0px) + 16px);
+  left: 50%;
+  width: min(236px, calc(100vw - 32px));
+  padding: 10px 12px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.38);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(23, 35, 45, 0.9);
+  box-shadow: 0 14px 34px rgba(10, 27, 33, 0.25);
+  backdrop-filter: blur(12px) saturate(1.08);
+  -webkit-backdrop-filter: blur(12px) saturate(1.08);
+  pointer-events: none;
+  transform: translateX(-50%);
+  transition:
+    opacity 220ms ease,
+    transform 220ms ease,
+    visibility 220ms ease;
+}
+
+.font-loading-copy {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  white-space: nowrap;
+}
+
+.font-loading-copy strong {
+  color: var(--yellow);
+  font-variant-numeric: tabular-nums;
+}
+
+.font-loading-sparkle {
+  color: var(--yellow);
+  font-size: 14px;
+  line-height: 1;
+  animation: font-loading-pulse 900ms ease-in-out infinite alternate;
+}
+
+.font-loading-track {
+  height: 4px;
+  margin-top: 8px;
+  overflow: hidden;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.2);
+}
+
+.font-loading-bar {
+  display: block;
+  width: 0;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--sky), var(--yellow));
+  box-shadow: 0 0 10px rgba(252, 198, 65, 0.45);
+  transition: width 180ms ease-out;
+}
+
+.font-loading-popover.is-complete .font-loading-sparkle {
+  animation: none;
+}
+
+.font-loading-popover.is-error {
+  border-color: rgba(255, 221, 174, 0.5);
+  background: rgba(91, 50, 30, 0.94);
+}
+
+.font-loading-popover.is-error .font-loading-copy {
+  white-space: normal;
+}
+
+.font-loading-popover.is-hidden {
+  visibility: hidden;
+  opacity: 0;
+  transform: translate(-50%, -10px) scale(0.98);
+}
+
+@keyframes font-loading-pulse {
+  from {
+    opacity: 0.52;
+    transform: rotate(-12deg) scale(0.88);
+  }
+
+  to {
+    opacity: 1;
+    transform: rotate(12deg) scale(1.12);
+  }
+}
+
 button,
 input,
 select {
@@ -1681,6 +1775,10 @@ details[open] > .precision-summary .precision-chevron {
 }
 
 @media (max-width: 560px) {
+  .font-loading-popover {
+    top: calc(env(safe-area-inset-top, 0px) + 62px);
+  }
+
   .app-shell {
     padding: 8px;
   }
@@ -1872,6 +1970,10 @@ details[open] > .precision-summary .precision-chevron {
 }
 
 @media (prefers-reduced-motion: reduce) {
+  .font-loading-sparkle {
+    animation: none;
+  }
+
   *,
   *::before,
   *::after {

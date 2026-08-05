@@ -23,7 +23,7 @@
       type="image/webp"
       fetchpriority="high"
     />
-    <link rel="stylesheet" href="./styles.css?v=15" />
+    <link rel="stylesheet" href="./styles.css?v=16" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -72,6 +72,32 @@
 
       <main class="workspace">
         <aside class="control-panel" aria-label="字标设置">
+          <div class="editor-mode-tabs" role="tablist" aria-label="选择制作模式">
+            <button
+              class="editor-mode-tab active"
+              id="imageModeTab"
+              type="button"
+              role="tab"
+              aria-selected="true"
+              data-editor-mode="image"
+            >
+              <span aria-hidden="true">▣</span>
+              图片制作
+            </button>
+            <button
+              class="editor-mode-tab"
+              id="gifModeTab"
+              type="button"
+              role="tab"
+              aria-selected="false"
+              data-editor-mode="gif"
+            >
+              <span aria-hidden="true">▶</span>
+              GIF 制作
+              <i>NEW</i>
+            </button>
+          </div>
+
           <section class="control-section first-section">
             <div class="section-title">
               <span class="step-number">01</span>
@@ -323,7 +349,7 @@
           <section class="control-section image-layer-section">
             <div class="section-title">
               <span class="step-number">04</span>
-              <h2>加入一张图片</h2>
+              <h2 id="imageLayerTitle">加入贴纸或图片</h2>
               <button
                 id="overlayLockButton"
                 class="layer-lock-button"
@@ -337,19 +363,40 @@
               </button>
             </div>
 
-            <div class="overlay-upload-row">
-              <label class="upload-button" for="overlayFile">
-                <input
-                  id="overlayFile"
-                  type="file"
-                  accept="image/png,image/jpeg,image/webp"
-                />
-                <span aria-hidden="true">＋</span>
-                选择图片
-              </label>
-              <button id="removeOverlayButton" class="remove-layer-button" type="button" disabled>
-                移除
-              </button>
+            <details class="official-assets-disclosure" id="officialAssetsDisclosure" open>
+              <summary class="precision-summary official-assets-summary">
+                <span>
+                  <strong>官方 Angelina 素材</strong>
+                  <small id="officialAssetsSummaryHint">10 张角色贴纸 · 28 个装饰</small>
+                </span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="official-assets-panel">
+                <div class="asset-category-tabs" id="assetCategoryTabs" role="tablist" aria-label="素材分类">
+                  <button class="active" type="button" role="tab" aria-selected="true" data-asset-category="characters">角色贴纸</button>
+                  <button type="button" role="tab" aria-selected="false" data-asset-category="decorations">装饰素材</button>
+                </div>
+                <p class="official-assets-hint" id="officialAssetsHint">点一下即可加入画布，仍可拖动、缩放和旋转。</p>
+                <div class="official-asset-grid" id="officialAssetGrid" aria-live="polite"></div>
+              </div>
+            </details>
+
+            <div class="custom-upload-block" id="customUploadBlock">
+              <div class="asset-divider"><span>或使用本地图片</span></div>
+              <div class="overlay-upload-row">
+                <label class="upload-button" for="overlayFile">
+                  <input
+                    id="overlayFile"
+                    type="file"
+                    accept="image/png,image/jpeg,image/webp"
+                  />
+                  <span aria-hidden="true">＋</span>
+                  选择图片
+                </label>
+                <button id="removeOverlayButton" class="remove-layer-button" type="button" disabled>
+                  移除
+                </button>
+              </div>
             </div>
 
             <div class="overlay-file-card" id="overlayFileCard" aria-live="polite">
@@ -409,7 +456,7 @@
               </div>
             </details>
 
-            <p class="overlay-hint">解锁后可在画布中移动、缩放和旋转。</p>
+            <p class="overlay-hint" id="overlayHint">解锁后可在画布中移动、缩放和旋转。</p>
           </section>
 
         </aside>
@@ -488,11 +535,11 @@
             <div class="export-copy">
               <span class="export-icon" aria-hidden="true">↧</span>
               <span>
-                <strong>保存作品</strong>
+                <strong id="exportTitle">保存作品</strong>
                 <small id="exportDescription">3200 × 1486 px</small>
               </span>
             </div>
-            <label class="scale-select">
+            <label class="scale-select" id="imageQualityControl">
               <span>清晰度</span>
               <select id="exportScale" aria-label="导出清晰度">
                 <option value="1">标准 · 1×</option>
@@ -500,15 +547,26 @@
                 <option value="3">超清 · 3×</option>
               </select>
             </label>
+            <label class="scale-select" id="gifQualityControl" hidden>
+              <span>GIF 体积</span>
+              <select id="gifQuality" aria-label="GIF 清晰度与体积">
+                <option value="compact">轻巧 · 640 px</option>
+                <option value="balanced" selected>推荐 · 800 px</option>
+                <option value="high">高清 · 1024 px</option>
+              </select>
+            </label>
             <button class="download-button" id="downloadButton" type="button">
-              <span aria-hidden="true">↓</span>
-              保存图片
+              <span id="downloadButtonIcon" aria-hidden="true">↓</span>
+              <span id="downloadButtonLabel">保存图片</span>
             </button>
           </div>
         </section>
       </main>
 
       <footer class="site-footer">
+        <p class="asset-credit">
+          素材来源：《明日方舟》官方 · 相关素材版权归《明日方舟》及其权利人所有
+        </p>
         <a
           class="github-link"
           href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
@@ -598,6 +656,7 @@
     <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
-    <script src="./app.js?v=21"></script>
+    <script src="./assets/angelina/manifest.js?v=1"></script>
+    <script src="./app.js?v=22"></script>
   </body>
 </html>

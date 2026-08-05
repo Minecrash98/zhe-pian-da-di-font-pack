@@ -14,6 +14,14 @@ npx wrangler pages deploy . --project-name=你的项目名
 
 部署完成后，在 Cloudflare 控制台进入 `Workers & Pages → 你的项目 → Custom domains` 绑定域名。
 
+## 流量统计
+
+这是纯静态 Pages 项目，没有 Pages Functions，因此 `Functions Metrics` 不会显示普通页面访问量。需要在 `Workers & Pages → 项目 → Metrics → Web Analytics` 中启用 Web Analytics，并在启用后重新部署一次。Cloudflare 会在 HTML 中自动注入统计脚本，之后到控制台的 `Web Analytics` 页面查看访客和页面浏览数据。
+
+如果一键启用提示错误，先确认当前成员拥有 `Account Settings Write` 权限，并在账号级 `Web Analytics` 页面检查是否已有同域名的残留配置。也可以从该页面手动添加 Pages 域名，再把生成的 beacon snippet 放入 `index.html`。
+
+官方说明：<https://developers.cloudflare.com/pages/how-to/web-analytics/>
+
 官方说明：
 
 - https://developers.cloudflare.com/pages/get-started/direct-upload/
@@ -22,10 +30,10 @@ npx wrangler pages deploy . --project-name=你的项目名
 
 ## 其他静态服务器
 
-把本目录全部内容原样上传到站点根目录，并保持 `assets/` 内的目录结构。服务器需要能正确返回 `.html`、`.css`、`.js`、`.json`、`.png` 和 `.ttf` 文件。
+把本目录全部内容原样上传到站点根目录，并保持 `assets/` 内的目录结构。服务器需要能正确返回 `.html`、`.css`、`.js`、`.json`、`.png`、`.webp`、`.gif` 和 `.ttf` 文件。
 
 不要直接双击 `index.html` 使用 `file://` 打开；字体和字形清单需要通过 HTTP 或 HTTPS 提供。
 
 ## 隐私说明
 
-用户选择的图片只由浏览器读取并存入当前浏览器的 IndexedDB，不会发送到服务器。文字排版、图片叠加和透明 PNG 导出也全部在浏览器本地完成。
+用户选择的图片只由浏览器读取并存入当前浏览器的 IndexedDB，不会发送到服务器。文字排版、图片叠加、透明 PNG 和 GIF 合成导出也全部在浏览器本地完成。

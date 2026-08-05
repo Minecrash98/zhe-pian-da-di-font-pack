@@ -34,6 +34,8 @@
     overlayOpacity: 100,
     overlayLayer: "background",
     overlayLocked: true,
+    editorMode: "image",
+    gifQuality: "balanced",
     seed: 147
   };
 
@@ -47,6 +49,18 @@
   var overlayFileName = "";
   var overlayFileBytes = 0;
   var overlayObjectUrl = "";
+  var overlaySourceType = "";
+  var selectedOfficialAsset = null;
+  var officialAssetCategory = "characters";
+  var officialAssetLoadToken = 0;
+  var gifPreviewTimer = 0;
+  var gifPreviewFrames = [];
+  var gifPreviewFrameIndex = 0;
+  var gifFrameCache = Object.create(null);
+  var angelinaAssets = window.ANGELINA_ASSETS || {
+    characters: [],
+    decorations: []
+  };
   var activeDragTarget = "artwork";
   var canvasSelectionVisible = false;
   var canvasDragging = false;
@@ -76,6 +90,9 @@
     canvasScaleHandle: document.getElementById("canvasScaleHandle"),
     canvasResetButton: document.getElementById("canvasResetButton"),
     controlPanel: document.querySelector(".control-panel"),
+    editorModeTabs: document.querySelectorAll(".editor-mode-tab"),
+    imageModeTab: document.getElementById("imageModeTab"),
+    gifModeTab: document.getElementById("gifModeTab"),
     line1: document.getElementById("line1"),
     line2: document.getElementById("line2"),
     subtitle: document.getElementById("subtitle"),
@@ -121,6 +138,18 @@
     skyColor: document.getElementById("skyColor"),
     skyColorValue: document.getElementById("skyColorValue"),
     overlayFile: document.getElementById("overlayFile"),
+    imageLayerTitle: document.getElementById("imageLayerTitle"),
+    officialAssetsSummaryHint: document.getElementById(
+      "officialAssetsSummaryHint"
+    ),
+    assetCategoryTabs: document.getElementById("assetCategoryTabs"),
+    assetCategoryButtons: document.querySelectorAll(
+      "[data-asset-category]"
+    ),
+    officialAssetsHint: document.getElementById("officialAssetsHint"),
+    officialAssetGrid: document.getElementById("officialAssetGrid"),
+    customUploadBlock: document.getElementById("customUploadBlock"),
+    overlayHint: document.getElementById("overlayHint"),
     overlayControls: document.getElementById("overlayControls"),
     overlayFileCard: document.getElementById("overlayFileCard"),
     overlayThumbnail: document.getElementById("overlayThumbnail"),
@@ -142,9 +171,15 @@
     removeOverlayButton: document.getElementById("removeOverlayButton"),
     resetOverlayButton: document.getElementById("resetOverlayButton"),
     exportScale: document.getElementById("exportScale"),
+    gifQuality: document.getElementById("gifQuality"),
+    imageQualityControl: document.getElementById("imageQualityControl"),
+    gifQualityControl: document.getElementById("gifQualityControl"),
+    exportTitle: document.getElementById("exportTitle"),
     exportDescription: document.getElementById("exportDescription"),
     renderStatus: document.getElementById("renderStatus"),
     downloadButton: document.getElementById("downloadButton"),
+    downloadButtonIcon: document.getElementById("downloadButtonIcon"),
+    downloadButtonLabel: document.getElementById("downloadButtonLabel"),
     cacheRefreshButton: document.getElementById("cacheRefreshButton"),
     mobileCacheRefreshButton: document.getElementById(
       "mobileCacheRefreshButton"
@@ -154,6 +189,8 @@
     shuffleButton: document.getElementById("shuffleButton"),
     saveAssist: document.getElementById("saveAssist"),
     saveAssistCard: document.getElementById("saveAssistCard"),
+    saveAssistTitle: document.getElementById("saveAssistTitle"),
+    saveAssistDescription: document.getElementById("saveAssistDescription"),
     saveAssistBackdrop: document.getElementById("saveAssistBackdrop"),
     saveAssistCloseButton: document.getElementById("saveAssistCloseButton"),
     systemSaveButton: document.getElementById("systemSaveButton"),
@@ -394,7 +431,7 @@
     if (!elements.canvasRatioPicker) {
       return;
     }
-    var hasImage = Boolean(overlayImage);
+    var hasImage = Boolean(overlayImage && overlaySourceType === "upload");
     elements.autoCanvasRatioButton.disabled = !hasImage;
     elements.canvasRatioPicker
       .querySelectorAll(".canvas-ratio-option")
@@ -636,7 +673,321 @@
     }
   }
 
+  function findOfficialCharacter(id) {
+    return angelinaAssets.characters.find(function (asset) {
+      return asset.id === id;
+    });
+  }
+
+  function findOfficialDecoration(id) {
+    return angelinaAssets.decorations.find(function (asset) {
+      return asset.id === id;
+    });
+  }
+
+  function characterAssetSource(id) {
+    return "./assets/angelina/static/" + id + ".png";
+  }
+
+  function characterThumbnailSource(id) {
+    return "./assets/angelina/thumbs/" + id + ".webp";
+  }
+
+  function decorationAssetSource(id) {
+    return "./assets/angelina/decorations/" + id + ".png";
+  }
+
+  function frameAssetSource(id, index) {
+    return (
+      "./assets/angelina/frames/" +
+      id +
+      "/" +
+      String(index).padStart(2, "0") +
+      ".webp"
+    );
+  }
+
+  function stopGifPreviewLoop() {
+    window.clearTimeout(gifPreviewTimer);
+    gifPreviewTimer = 0;
+  }
+
+  function startGifPreviewLoop() {
+    stopGifPreviewLoop();
+    if (
+      state.editorMode !== "gif" ||
+      overlaySourceType !== "official-gif" ||
+      gifPreviewFrames.length < 2 ||
+      document.hidden ||
+      window.matchMedia("(prefers-reduced-motion: reduce)").matches
+    ) {
+      return;
+    }
+    var asset =
+      selectedOfficialAsset && findOfficialCharacter(selectedOfficialAsset.id);
+    var delay = asset ? asset.frameDelay : 200;
+    var tick = function () {
+      gifPreviewFrameIndex =
+        (gifPreviewFrameIndex + 1) % gifPreviewFrames.length;
+      overlayImage = gifPreviewFrames[gifPreviewFrameIndex];
+      scheduleRender();
+      gifPreviewTimer = window.setTimeout(tick, delay);
+    };
+    gifPreviewTimer = window.setTimeout(tick, delay);
+  }
+
+  function renderOfficialAssetGrid() {
+    if (!elements.officialAssetGrid) {
+      return;
+    }
+    var gifMode = state.editorMode === "gif";
+    var assets =
+      !gifMode && officialAssetCategory === "decorations"
+        ? angelinaAssets.decorations
+        : angelinaAssets.characters;
+    var kind =
+      !gifMode && officialAssetCategory === "decorations"
+        ? "decoration"
+        : "character";
+    var fragment = document.createDocumentFragment();
+
+    assets.forEach(function (asset) {
+      var button = document.createElement("button");
+      var thumb = document.createElement("span");
+      var image = document.createElement("img");
+      var label = document.createElement("span");
+      button.type = "button";
+      button.className = "official-asset-button";
+      button.dataset.assetKind = kind;
+      button.dataset.assetId = asset.id;
+      button.setAttribute(
+        "aria-label",
+        (gifMode ? "使用动态贴纸 " : "使用素材 ") + asset.name
+      );
+      if (
+        selectedOfficialAsset &&
+        selectedOfficialAsset.kind === kind &&
+        selectedOfficialAsset.id === asset.id
+      ) {
+        button.classList.add("active");
+        button.setAttribute("aria-pressed", "true");
+      } else {
+        button.setAttribute("aria-pressed", "false");
+      }
+
+      thumb.className = "official-asset-thumb";
+      image.loading = "lazy";
+      image.decoding = "async";
+      image.alt = "";
+      image.src =
+        kind === "character"
+          ? characterThumbnailSource(asset.id)
+          : decorationAssetSource(asset.id);
+      thumb.appendChild(image);
+      button.appendChild(thumb);
+
+      if (gifMode) {
+        var badge = document.createElement("i");
+        badge.className = "official-asset-gif-badge";
+        badge.textContent = asset.frameCount + " 帧";
+        badge.setAttribute("aria-hidden", "true");
+        button.appendChild(badge);
+      }
+
+      label.textContent = asset.name;
+      button.appendChild(label);
+      fragment.appendChild(button);
+    });
+
+    elements.officialAssetGrid.replaceChildren(fragment);
+  }
+
+  function updateEditorModeInterface() {
+    var gifMode = state.editorMode === "gif";
+    document.body.dataset.editorMode = state.editorMode;
+    elements.editorModeTabs.forEach(function (button) {
+      var active = button.dataset.editorMode === state.editorMode;
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+      button.setAttribute("tabindex", active ? "0" : "-1");
+    });
+    elements.assetCategoryButtons.forEach(function (button) {
+      var decorations = button.dataset.assetCategory === "decorations";
+      button.hidden = gifMode && decorations;
+      var active =
+        (!gifMode && button.dataset.assetCategory === officialAssetCategory) ||
+        (gifMode && button.dataset.assetCategory === "characters");
+      button.classList.toggle("active", active);
+      button.setAttribute("aria-selected", String(active));
+    });
+    elements.customUploadBlock.hidden = gifMode;
+    elements.imageQualityControl.hidden = gifMode;
+    elements.gifQualityControl.hidden = !gifMode;
+    elements.imageLayerTitle.textContent = gifMode
+      ? "选择动态贴纸"
+      : "加入贴纸或图片";
+    elements.officialAssetsSummaryHint.textContent = gifMode
+      ? "10 组动态贴纸 · 每组 4–8 帧"
+      : "10 张角色贴纸 · 28 个装饰";
+    elements.officialAssetsHint.textContent = gifMode
+      ? "只载入当前选中的 GIF；导出时会按体积档位重新压缩。"
+      : "点一下即可加入画布，仍可拖动、缩放和旋转。";
+    elements.overlayHint.textContent = gifMode
+      ? "预览会动，文字与贴纸的位置仍可自由调整。"
+      : "解锁后可在画布中移动、缩放和旋转。";
+    elements.exportTitle.textContent = gifMode ? "导出动态作品" : "保存作品";
+    elements.downloadButtonIcon.textContent = gifMode ? "▶" : "↓";
+    elements.downloadButtonLabel.textContent = gifMode
+      ? "保存 GIF"
+      : "保存图片";
+    renderOfficialAssetGrid();
+  }
+
+  function loadOfficialAsset(kind, id, options) {
+    options = options || {};
+    var gifMode = state.editorMode === "gif";
+    var asset =
+      kind === "decoration"
+        ? findOfficialDecoration(id)
+        : findOfficialCharacter(id);
+    if (!asset || (gifMode && kind !== "character")) {
+      showToast("这份素材暂时无法使用");
+      return;
+    }
+
+    var source =
+      kind === "decoration"
+        ? decorationAssetSource(id)
+        : gifMode
+          ? frameAssetSource(id, 1)
+          : characterAssetSource(id);
+    var token = ++officialAssetLoadToken;
+    var image = new Image();
+    gifPreviewFrames = [];
+    gifPreviewFrameIndex = 0;
+    elements.officialAssetGrid.classList.add("is-loading");
+    elements.officialAssetGrid.setAttribute("aria-busy", "true");
+    image.decoding = "async";
+    image.onload = function () {
+      if (token !== officialAssetLoadToken) {
+        return;
+      }
+      if (overlayObjectUrl) {
+        URL.revokeObjectURL(overlayObjectUrl);
+      }
+      overlayImage = image;
+      overlayFileName = asset.name;
+      overlayFileBytes = 0;
+      overlayObjectUrl = "";
+      overlaySourceType =
+        kind === "decoration"
+          ? "official-decoration"
+          : gifMode
+            ? "official-gif"
+            : "official-static";
+      selectedOfficialAsset = { kind: kind, id: id };
+      officialAssetCategory = kind === "decoration" ? "decorations" : "characters";
+      if (state.canvasRatioMode === "auto") {
+        state.canvasRatioMode = defaults.canvasRatioMode;
+        state.canvasSize = defaults.canvasSize;
+        elements.canvasSize.value = state.canvasSize;
+      }
+      if (options.resetTransform !== false) {
+        resetOverlayTransform();
+        state.overlayScale = kind === "character" ? 36 : 62;
+        state.overlayX = kind === "character" ? 78 : 50;
+        state.overlayY = kind === "character" ? 54 : 50;
+        state.overlayLayer = kind === "character" ? "foreground" : "background";
+        elements.overlayScale.value = state.overlayScale;
+        elements.overlayX.value = state.overlayX;
+        elements.overlayY.value = state.overlayY;
+        elements.overlayLayer.value = state.overlayLayer;
+      }
+      state.overlayLocked = false;
+      elements.overlayThumbnail.src =
+        kind === "character" ? characterThumbnailSource(id) : source;
+      elements.overlayFile.value = "";
+      elements.officialAssetGrid.classList.remove("is-loading");
+      elements.officialAssetGrid.removeAttribute("aria-busy");
+      deleteCachedOverlay().catch(function (error) {
+        console.warn("Could not clear the replaced local image cache.", error);
+      });
+      updateEditorModeInterface();
+      updateOverlayInterface();
+      updateCanvasRatioInterface();
+      setDragTarget("overlay");
+      scheduleRender();
+      if (gifMode) {
+        loadGifFrameImages(asset)
+          .then(function (images) {
+            if (
+              token !== officialAssetLoadToken ||
+              state.editorMode !== "gif" ||
+              !selectedOfficialAsset ||
+              selectedOfficialAsset.id !== id
+            ) {
+              return;
+            }
+            gifPreviewFrames = images;
+            gifPreviewFrameIndex = 0;
+            overlayImage = images[0];
+            scheduleRender();
+            startGifPreviewLoop();
+          })
+          .catch(function (error) {
+            console.warn("Could not prepare the GIF preview frames.", error);
+            showToast("动态预览加载失败，可刷新后重试");
+          });
+      } else {
+        startGifPreviewLoop();
+      }
+      if (!options.silent) {
+        showToast(gifMode ? "动态贴纸已加入" : "官方素材已加入");
+      }
+      anchorFixedViewportAfterLayout(false);
+    };
+    image.onerror = function () {
+      if (token !== officialAssetLoadToken) {
+        return;
+      }
+      elements.officialAssetGrid.classList.remove("is-loading");
+      elements.officialAssetGrid.removeAttribute("aria-busy");
+      showToast("素材加载失败，请刷新后重试");
+    };
+    image.src = source;
+  }
+
+  function setEditorMode(mode, notifyUser) {
+    mode = mode === "gif" ? "gif" : "image";
+    if (state.editorMode === mode) {
+      return;
+    }
+    stopGifPreviewLoop();
+    state.editorMode = mode;
+    if (mode === "gif") {
+      officialAssetCategory = "characters";
+    }
+    updateEditorModeInterface();
+    if (selectedOfficialAsset && selectedOfficialAsset.kind === "character") {
+      loadOfficialAsset("character", selectedOfficialAsset.id, {
+        resetTransform: false,
+        silent: true
+      });
+    } else if (mode === "gif" && angelinaAssets.characters.length) {
+      loadOfficialAsset("character", angelinaAssets.characters[0].id, {
+        silent: true
+      });
+    } else {
+      scheduleRender();
+    }
+    if (notifyUser) {
+      showToast(mode === "gif" ? "已切换到 GIF 制作" : "已切换到图片制作");
+    }
+  }
+
   function clearOverlayImage(resetTransform, preserveLocalCache) {
+    ++officialAssetLoadToken;
+    stopGifPreviewLoop();
     if (overlayObjectUrl) {
       URL.revokeObjectURL(overlayObjectUrl);
     }
@@ -644,6 +995,10 @@
     overlayFileName = "";
     overlayFileBytes = 0;
     overlayObjectUrl = "";
+    overlaySourceType = "";
+    selectedOfficialAsset = null;
+    gifPreviewFrames = [];
+    gifPreviewFrameIndex = 0;
     state.overlayLocked = defaults.overlayLocked;
     if (state.canvasRatioMode === "auto") {
       state.canvasRatioMode = defaults.canvasRatioMode;
@@ -671,6 +1026,7 @@
       });
     }
     updateOverlayInterface();
+    renderOfficialAssetGrid();
     updateCanvasRatioInterface();
     anchorFixedViewportAfterLayout(false);
   }
@@ -701,6 +1057,8 @@
     var image = new Image();
     image.decoding = "async";
     image.onload = function () {
+      ++officialAssetLoadToken;
+      stopGifPreviewLoop();
       if (overlayObjectUrl) {
         URL.revokeObjectURL(overlayObjectUrl);
       }
@@ -708,6 +1066,10 @@
       overlayFileName = options.name || file.name || "这张图片";
       overlayFileBytes = options.size || file.size || 0;
       overlayObjectUrl = objectUrl;
+      overlaySourceType = "upload";
+      selectedOfficialAsset = null;
+      gifPreviewFrames = [];
+      gifPreviewFrameIndex = 0;
       state.overlayLocked = defaults.overlayLocked;
       hideCanvasSelection();
       state.canvasRatioMode = "auto";
@@ -718,6 +1080,7 @@
       }
       elements.overlayThumbnail.src = objectUrl;
       elements.overlayFile.value = "";
+      renderOfficialAssetGrid();
       updateOverlayInterface();
       updateCanvasRatioInterface();
       if (!options.silent) {
@@ -745,7 +1108,7 @@
   function restoreCachedOverlay() {
     readCachedOverlay()
       .then(function (cached) {
-        if (!cached || !cached.blob) {
+        if (!cached || !cached.blob || state.editorMode !== "image") {
           return;
         }
         loadOverlayFile(cached.blob, {
@@ -805,12 +1168,33 @@
 
     if (hasImage) {
       elements.overlayFileName.textContent = overlayFileName;
-      elements.overlayFileMeta.textContent =
-        overlayImage.naturalWidth +
-        " × " +
-        overlayImage.naturalHeight +
-        " px · " +
-        formatFileSize(overlayFileBytes);
+      var officialCharacter =
+        selectedOfficialAsset && selectedOfficialAsset.kind === "character"
+          ? findOfficialCharacter(selectedOfficialAsset.id)
+          : null;
+      if (overlaySourceType === "official-gif" && officialCharacter) {
+        elements.overlayFileMeta.textContent =
+          "动态贴纸 · " + officialCharacter.frameCount + " 帧 · 循环播放";
+      } else if (overlaySourceType === "official-decoration") {
+        elements.overlayFileMeta.textContent =
+          overlayImage.naturalWidth +
+          " × " +
+          overlayImage.naturalHeight +
+          " px · 官方装饰";
+      } else if (overlaySourceType === "official-static") {
+        elements.overlayFileMeta.textContent =
+          overlayImage.naturalWidth +
+          " × " +
+          overlayImage.naturalHeight +
+          " px · 官方贴纸";
+      } else {
+        elements.overlayFileMeta.textContent =
+          overlayImage.naturalWidth +
+          " × " +
+          overlayImage.naturalHeight +
+          " px · " +
+          formatFileSize(overlayFileBytes);
+      }
     } else {
       elements.overlayFileName.textContent = "还没有添加图片";
       elements.overlayFileMeta.textContent =
@@ -829,13 +1213,14 @@
     updateCanvasRatioInterface();
   }
 
-  function drawOverlayImage(ctx, width, height) {
-    if (!overlayImage || !overlayImage.naturalWidth || !overlayImage.naturalHeight) {
+  function drawOverlayImage(ctx, width, height, image) {
+    image = image || overlayImage;
+    if (!image || !image.naturalWidth || !image.naturalHeight) {
       return;
     }
     var drawWidth = width * (state.overlayScale / 100);
     var drawHeight =
-      drawWidth * (overlayImage.naturalHeight / overlayImage.naturalWidth);
+      drawWidth * (image.naturalHeight / image.naturalWidth);
     var centerX = width * (state.overlayX / 100);
     var centerY = height * (state.overlayY / 100);
 
@@ -844,7 +1229,7 @@
     ctx.translate(centerX, centerY);
     ctx.rotate((state.overlayRotation * Math.PI) / 180);
     ctx.drawImage(
-      overlayImage,
+      image,
       -drawWidth / 2,
       -drawHeight / 2,
       drawWidth,
@@ -2277,11 +2662,13 @@
     );
   }
 
-  function renderArtwork(canvas, scale) {
+  function renderArtwork(canvas, scale, options) {
     var dimensions = dimensionsFromValue(state.canvasSize);
     var width = dimensions.width;
     var height = dimensions.height;
     var pixelScale = scale || 1;
+    var renderOverlayImage =
+      options && options.overlayImage ? options.overlayImage : overlayImage;
 
     canvas.width = Math.round(width * pixelScale);
     canvas.height = Math.round(height * pixelScale);
@@ -2467,8 +2854,8 @@
       );
     }
 
-    if (overlayImage && state.overlayLayer === "background") {
-      drawOverlayImage(ctx, width, height);
+    if (renderOverlayImage && state.overlayLayer === "background") {
+      drawOverlayImage(ctx, width, height, renderOverlayImage);
     }
 
     ctx.save();
@@ -2549,8 +2936,8 @@
 
     ctx.restore();
 
-    if (overlayImage && state.overlayLayer === "foreground") {
-      drawOverlayImage(ctx, width, height);
+    if (renderOverlayImage && state.overlayLayer === "foreground") {
+      drawOverlayImage(ctx, width, height, renderOverlayImage);
     }
 
     return {
@@ -2559,7 +2946,7 @@
       lines: titleLines,
       subtitle: subtitle,
       artworkBounds: artworkBounds,
-      isEmpty: !titleLines.length && !subtitle && !overlayImage
+      isEmpty: !titleLines.length && !subtitle && !renderOverlayImage
     };
   }
 
@@ -2591,6 +2978,32 @@
     state.overlayOpacity = Number(elements.overlayOpacity.value);
     state.overlayLayer = elements.overlayLayer.value;
     state.exportScale = Number(elements.exportScale.value);
+    state.gifQuality = elements.gifQuality.value;
+  }
+
+  function gifQualitySettings(value) {
+    if (value === "compact") {
+      return { maxSide: 640, maxColors: 64, label: "轻巧" };
+    }
+    if (value === "high") {
+      return { maxSide: 1024, maxColors: 256, label: "高清" };
+    }
+    return { maxSide: 800, maxColors: 128, label: "推荐" };
+  }
+
+  function gifOutputDimensions() {
+    var dimensions = dimensionsFromValue(state.canvasSize);
+    var settings = gifQualitySettings(state.gifQuality);
+    var scale = Math.min(
+      1,
+      settings.maxSide / Math.max(dimensions.width, dimensions.height)
+    );
+    return {
+      width: Math.max(1, Math.round(dimensions.width * scale)),
+      height: Math.max(1, Math.round(dimensions.height * scale)),
+      scale: scale,
+      settings: settings
+    };
   }
 
   function updateRange(range, output, suffix) {
@@ -2654,8 +3067,24 @@
       dimensions.width + " / " + dimensions.height
     );
     fitCanvasFrame(dimensions);
-    elements.exportDescription.textContent =
-      exportWidth + " × " + exportHeight + " px";
+    if (state.editorMode === "gif") {
+      var gifDimensions = gifOutputDimensions();
+      var gifAsset =
+        selectedOfficialAsset && selectedOfficialAsset.kind === "character"
+          ? findOfficialCharacter(selectedOfficialAsset.id)
+          : null;
+      elements.exportDescription.textContent =
+        gifDimensions.width +
+        " × " +
+        gifDimensions.height +
+        " px · " +
+        (gifAsset ? gifAsset.frameCount + " 帧 · " : "") +
+        gifDimensions.settings.maxColors +
+        " 色";
+    } else {
+      elements.exportDescription.textContent =
+        exportWidth + " × " + exportHeight + " px";
+    }
 
     // Artwork colors belong to the canvas only. The interface keeps the
     // fixed theme colors declared in CSS so light artwork palettes remain usable.
@@ -2689,7 +3118,19 @@
     }
 
     if (!result.lines.length && !result.subtitle && overlayImage) {
-      elements.renderStatus.textContent = "拖动图片，放到喜欢的位置";
+      elements.renderStatus.textContent =
+        state.editorMode === "gif"
+          ? "动态贴纸正在循环预览"
+          : "拖动图片，放到喜欢的位置";
+      return;
+    }
+
+    if (state.editorMode === "gif" && overlaySourceType === "official-gif") {
+      var previewAsset =
+        selectedOfficialAsset && findOfficialCharacter(selectedOfficialAsset.id);
+      elements.renderStatus.textContent = previewAsset
+        ? "动态预览中 · " + previewAsset.frameCount + " 帧循环"
+        : "动态预览中";
       return;
     }
 
@@ -2744,6 +3185,8 @@
     elements.overlayOpacity.value = state.overlayOpacity;
     elements.overlayLayer.value = state.overlayLayer;
     elements.exportScale.value = String(state.exportScale);
+    elements.gifQuality.value = state.gifQuality;
+    updateEditorModeInterface();
     updateOverlayInterface();
     updateBackgroundInterface();
   }
@@ -2910,7 +3353,15 @@
       elements.downloadButton.setAttribute("aria-busy", "true");
     } else {
       elements.downloadButton.removeAttribute("aria-busy");
+      elements.downloadButtonIcon.textContent =
+        state.editorMode === "gif" ? "▶" : "↓";
+      elements.downloadButtonLabel.textContent =
+        state.editorMode === "gif" ? "保存 GIF" : "保存图片";
     }
+  }
+
+  function setDownloadProgress(label) {
+    elements.downloadButtonLabel.textContent = label;
   }
 
   function isMobileSaveBrowser() {
@@ -2935,7 +3386,7 @@
     }
     try {
       return new File([blob], filename, {
-        type: "image/png",
+        type: blob.type || "application/octet-stream",
         lastModified: Date.now()
       });
     } catch (error) {
@@ -2991,6 +3442,16 @@
     pendingSaveFile = createArtworkFile(blob, filename);
     pendingSaveObjectUrl = URL.createObjectURL(blob);
     pendingSaveDimensions = dimensions;
+    var gifFile = blob.type === "image/gif";
+    elements.saveAssistTitle.textContent = gifFile
+      ? "GIF 已经准备好"
+      : "图片已经准备好";
+    elements.saveAssistDescription.textContent = gifFile
+      ? "这个浏览器可能不会自动保存 GIF，请选择一种可靠的保存方式。"
+      : "这个浏览器可能不会自动保存文件，请选择一种可靠的保存方式。";
+    elements.savedImagePreview.alt = gifFile
+      ? "刚刚生成的动态 GIF 作品"
+      : "刚刚生成的高清字标作品";
     saveAssistReturnFocus = document.activeElement;
     elements.saveAssistCard.hidden = false;
     elements.saveImagePreview.hidden = true;
@@ -3083,7 +3544,7 @@
   function deliverArtwork(blob, filename, dimensions) {
     if (isMobileSaveBrowser()) {
       showSaveAssist(blob, filename, dimensions);
-      elements.renderStatus.textContent = "图片已生成 · " + dimensions;
+      elements.renderStatus.textContent = "作品已生成 · " + dimensions;
       showToast("请选择一种保存方式");
     } else {
       startDirectDownload(blob, filename);
@@ -3093,6 +3554,261 @@
     setDownloadLoading(false);
   }
 
+  function waitForArtworkResources() {
+    var ready;
+    if (logoFontsReady || vectorEngineReady) {
+      ready = Promise.all([
+        logoFontsReady || Promise.resolve(),
+        vectorEngineReady || Promise.resolve()
+      ]);
+    } else if (document.fonts && document.fonts.ready) {
+      ready = document.fonts.ready;
+    } else {
+      ready = Promise.resolve();
+    }
+    return Promise.resolve(ready).then(function () {
+      if (styleEngine && styleEngine.whenAtlasReady) {
+        // Start requests for glyphs entered immediately before export.
+        renderArtwork(elements.canvas, 1);
+        return styleEngine.whenAtlasReady();
+      }
+      return undefined;
+    });
+  }
+
+  function loadImageResource(source) {
+    return new Promise(function (resolve, reject) {
+      var image = new Image();
+      image.decoding = "async";
+      image.onload = function () {
+        resolve(image);
+      };
+      image.onerror = function () {
+        reject(new Error("Unable to load animation frame: " + source));
+      };
+      image.src = source;
+    });
+  }
+
+  function loadGifFrameImages(asset, onProgress) {
+    if (gifFrameCache[asset.id]) {
+      return gifFrameCache[asset.id].then(function (images) {
+        if (onProgress) {
+          onProgress(1);
+        }
+        return images;
+      });
+    }
+    var loaded = 0;
+    var requests = [];
+    for (var index = 1; index <= asset.frameCount; index += 1) {
+      requests.push(
+        loadImageResource(frameAssetSource(asset.id, index)).then(
+          function (image) {
+            loaded += 1;
+            if (onProgress) {
+              onProgress(loaded / asset.frameCount);
+            }
+            return image;
+          }
+        )
+      );
+    }
+    gifFrameCache[asset.id] = Promise.all(requests).catch(function (error) {
+      delete gifFrameCache[asset.id];
+      throw error;
+    });
+    return gifFrameCache[asset.id];
+  }
+
+  function afterBrowserPaint() {
+    return new Promise(function (resolve) {
+      window.requestAnimationFrame(function () {
+        resolve();
+      });
+    });
+  }
+
+  function renderGifFramePayloads(asset, frameImages, output, onProgress) {
+    var canvas = document.createElement("canvas");
+    var frames = [];
+    var index = 0;
+
+    var renderNext = function () {
+      if (index >= frameImages.length) {
+        return Promise.resolve(frames);
+      }
+      renderArtwork(canvas, output.scale, {
+        overlayImage: frameImages[index]
+      });
+      var ctx = canvas.getContext("2d", { willReadFrequently: true });
+      var pixels = ctx.getImageData(0, 0, canvas.width, canvas.height).data;
+      frames.push({
+        pixels: pixels.buffer,
+        delay: asset.frameDelay
+      });
+      index += 1;
+      if (onProgress) {
+        onProgress(index / frameImages.length);
+      }
+      return afterBrowserPaint().then(renderNext);
+    };
+
+    return renderNext();
+  }
+
+  function encodeGifInWorker(frames, output, onProgress) {
+    return new Promise(function (resolve, reject) {
+      if (typeof Worker !== "function") {
+        reject(new Error("This browser does not support background GIF export"));
+        return;
+      }
+      var worker;
+      try {
+        worker = new Worker("./gif-export-worker.js?v=1", {
+          type: "module"
+        });
+      } catch (error) {
+        reject(error);
+        return;
+      }
+      var settled = false;
+      var finish = function (callback, value) {
+        if (settled) {
+          return;
+        }
+        settled = true;
+        worker.terminate();
+        callback(value);
+      };
+      worker.onmessage = function (event) {
+        var message = event.data || {};
+        if (message.type === "progress") {
+          if (onProgress) {
+            onProgress(clamp(Number(message.value) / 100, 0, 1));
+          }
+          return;
+        }
+        if (message.type === "finished") {
+          finish(resolve, new Blob([message.bytes], { type: "image/gif" }));
+          return;
+        }
+        if (message.type === "error") {
+          finish(reject, new Error(message.message || "GIF encoding failed"));
+        }
+      };
+      worker.onerror = function (event) {
+        finish(
+          reject,
+          new Error(event.message || "GIF export worker could not start")
+        );
+      };
+      var transfers = frames.map(function (frame) {
+        return frame.pixels;
+      });
+      worker.postMessage(
+        {
+          type: "encode",
+          frames: frames,
+          width: output.width,
+          height: output.height,
+          maxColors: output.settings.maxColors
+        },
+        transfers
+      );
+    });
+  }
+
+  function setGifExportBusy(busy) {
+    document.body.classList.toggle("gif-exporting", busy);
+    elements.controlPanel.setAttribute("aria-busy", String(busy));
+    if (!busy) {
+      elements.controlPanel.removeAttribute("aria-busy");
+    }
+  }
+
+  function downloadGifArtwork() {
+    if (elements.downloadButton.classList.contains("loading")) {
+      return;
+    }
+    var asset =
+      selectedOfficialAsset && selectedOfficialAsset.kind === "character"
+        ? findOfficialCharacter(selectedOfficialAsset.id)
+        : null;
+    if (!asset || overlaySourceType !== "official-gif") {
+      showToast("请先选择一组动态贴纸");
+      return;
+    }
+
+    readStateFromControls();
+    updateInterface();
+    var output = gifOutputDimensions();
+    stopGifPreviewLoop();
+    setGifExportBusy(true);
+    setDownloadLoading(true);
+    setDownloadProgress("准备帧…");
+    elements.renderStatus.textContent = "正在准备动态帧…";
+
+    waitForArtworkResources()
+      .catch(function (error) {
+        console.warn("Artwork resources were not fully ready.", error);
+      })
+      .then(function () {
+        return loadGifFrameImages(asset, function (progress) {
+          var percent = Math.round(progress * 100);
+          setDownloadProgress("载入 " + percent + "%");
+          elements.renderStatus.textContent =
+            "正在载入动态帧 · " + percent + "%";
+        });
+      })
+      .then(function (images) {
+        setDownloadProgress("合成画面…");
+        return renderGifFramePayloads(
+          asset,
+          images,
+          output,
+          function (progress) {
+            var percent = Math.round(progress * 100);
+            setDownloadProgress("合成 " + percent + "%");
+            elements.renderStatus.textContent =
+              "正在合成画面 · " + percent + "%";
+          }
+        );
+      })
+      .then(function (frames) {
+        setDownloadProgress("压缩 GIF…");
+        return encodeGifInWorker(frames, output, function (progress) {
+          var percent = Math.round(progress * 100);
+          setDownloadProgress("压缩 " + percent + "%");
+          elements.renderStatus.textContent =
+            "正在压缩 GIF · " + percent + "%";
+        });
+      })
+      .then(function (blob) {
+        setGifExportBusy(false);
+        startGifPreviewLoop();
+        var filename =
+          safeFilename(state.line1 || state.line2) + "-动态字标.gif";
+        var dimensions =
+          output.width +
+          " × " +
+          output.height +
+          " · " +
+          asset.frameCount +
+          " 帧 · " +
+          formatFileSize(blob.size);
+        deliverArtwork(blob, filename, dimensions);
+      })
+      .catch(function (error) {
+        console.warn("Unable to export GIF artwork.", error);
+        setGifExportBusy(false);
+        setDownloadLoading(false);
+        startGifPreviewLoop();
+        elements.renderStatus.textContent = "GIF 生成失败，请换低一档重试";
+        showToast("GIF 生成失败，请换低一档重试");
+      });
+  }
+
   function downloadArtwork() {
     if (elements.downloadButton.classList.contains("loading")) {
       return;
@@ -3100,6 +3816,7 @@
     readStateFromControls();
     updateInterface();
     setDownloadLoading(true);
+    setDownloadProgress("生成中…");
     elements.renderStatus.textContent = "正在准备高清作品…";
 
     var begin = function () {
@@ -3139,32 +3856,10 @@
       }
     };
 
-    if (logoFontsReady || vectorEngineReady) {
-      Promise.all([
-        logoFontsReady || Promise.resolve(),
-        vectorEngineReady || Promise.resolve()
-      ])
-        .then(function () {
-          if (styleEngine && styleEngine.whenAtlasReady) {
-            // A preflight render starts any glyph requests caused by text that
-            // was edited immediately before the download button was pressed.
-            renderArtwork(elements.canvas, 1);
-            return styleEngine.whenAtlasReady();
-          }
-          return undefined;
-        })
-        .then(begin, function (error) {
-          console.warn("Artwork resources were not fully ready.", error);
-          begin();
-        });
-    } else if (document.fonts && document.fonts.ready) {
-      document.fonts.ready.then(begin, function (error) {
-        console.warn("Artwork fonts were not fully ready.", error);
-        begin();
-      });
-    } else {
+    waitForArtworkResources().then(begin, function (error) {
+      console.warn("Artwork resources were not fully ready.", error);
       begin();
-    }
+    });
   }
 
   [
@@ -3194,10 +3889,44 @@
     elements.overlayRotation,
     elements.overlayOpacity,
     elements.overlayLayer,
-    elements.exportScale
+    elements.exportScale,
+    elements.gifQuality
   ].forEach(function (control) {
     control.addEventListener("input", scheduleRender);
     control.addEventListener("change", scheduleRender);
+  });
+
+  elements.editorModeTabs.forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (elements.downloadButton.classList.contains("loading")) {
+        return;
+      }
+      setEditorMode(button.dataset.editorMode, true);
+    });
+  });
+
+  elements.assetCategoryButtons.forEach(function (button) {
+    button.addEventListener("click", function () {
+      if (
+        state.editorMode === "gif" ||
+        elements.downloadButton.classList.contains("loading")
+      ) {
+        return;
+      }
+      officialAssetCategory = button.dataset.assetCategory;
+      updateEditorModeInterface();
+    });
+  });
+
+  elements.officialAssetGrid.addEventListener("click", function (event) {
+    if (elements.downloadButton.classList.contains("loading")) {
+      return;
+    }
+    var button = event.target.closest(".official-asset-button");
+    if (!button) {
+      return;
+    }
+    loadOfficialAsset(button.dataset.assetKind, button.dataset.assetId);
   });
 
   document.querySelectorAll(".canvas-ratio-option").forEach(function (button) {
@@ -3370,7 +4099,13 @@
     true
   );
 
-  elements.downloadButton.addEventListener("click", downloadArtwork);
+  elements.downloadButton.addEventListener("click", function () {
+    if (state.editorMode === "gif") {
+      downloadGifArtwork();
+    } else {
+      downloadArtwork();
+    }
+  });
   elements.cacheRefreshButton.addEventListener("click", refreshSiteCache);
   if (elements.mobileCacheRefreshButton) {
     elements.mobileCacheRefreshButton.addEventListener(
@@ -3394,6 +4129,14 @@
       !elements.saveAssist.hidden
     ) {
       closeSaveAssist();
+    }
+  });
+
+  document.addEventListener("visibilitychange", function () {
+    if (document.hidden) {
+      stopGifPreviewLoop();
+    } else {
+      startGifPreviewLoop();
     }
   });
 

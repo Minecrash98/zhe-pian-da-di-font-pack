@@ -7,9 +7,10 @@
 ## 功能
 
 - 自定义中英文文字、配色、间距、位置、大小、旋转角度和标题阴影
-- 添加并调整本地图片图层
+- 使用 Angelina 官方角色贴纸、动态贴纸与 UI 装饰，或添加本地图片图层
 - 支持透明、浅色和深色画布
 - 导出高清 PNG 图片
+- 导出循环 GIF，并提供 640 / 800 / 1024 px 三档体积控制
 - 桌面端固定预览、控制区独立滚动，并适配手机浏览器
 - 所有文字排版、图片合成和导出均在浏览器内完成
 
@@ -31,6 +32,6 @@ python3 -m http.server 8976
 
 ## 开源许可
 
-项目原创 HTML、CSS 和 JavaScript 源码采用 [MIT License](./LICENSE)。字体、第三方库、活动美术背景和风格字形 PNG 不属于项目 MIT 授权范围，具体说明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
+项目原创 HTML、CSS 和 JavaScript 源码采用 [MIT License](./LICENSE)。字体、第三方库、活动美术背景、官方 Angelina 素材和风格字形 PNG 不属于项目 MIT 授权范围，具体说明见 [THIRD_PARTY_NOTICES.md](./THIRD_PARTY_NOTICES.md)。
 
 本项目为非官方同人二创，与鹰角网络、Hypergryph、哔哩哔哩及《明日方舟》官方无隶属或背书关系。相关名称、商标与美术素材的权利归各自权利人所有。

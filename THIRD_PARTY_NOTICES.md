@@ -13,6 +13,12 @@
 - 文件：`assets/font-atlas/glyphs-v2/**`、`assets/font-atlas/runtime-glyph-index.json`
 - 说明：这些文件用于还原活动视觉风格，属于项目内的二创视觉素材，不纳入项目 MIT License。使用者应自行确认其使用场景符合相关权利人的要求。
 
+## 《明日方舟》Angelina 官方素材
+
+- 文件：`assets/angelina/**`
+- 来源：《明日方舟》官方发布的 Angelina 角色贴纸、动态贴纸与 UI 装饰素材包
+- 说明：相关角色、美术、动画、名称和标识的权利归《明日方舟》及其对应权利人所有，不纳入本项目 MIT License。本仓库不另行授予这些素材的复制、修改、再发布或商业使用权。
+
 ## 字体
 
 下列字体分别遵循 SIL Open Font License 1.1，完整许可文本已经随字体保存在仓库中：
@@ -26,6 +32,7 @@
 ## JavaScript 库
 
 - opentype.js — MIT License，完整许可文本见 `assets/vendor/LICENSE-opentype.txt`
+- gifenc — MIT License，完整许可文本见 `assets/vendor/gifenc.LICENSE.md`
 
 ## 商标与非官方声明
 

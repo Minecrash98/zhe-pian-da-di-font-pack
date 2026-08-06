@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=23" />
+    <link rel="stylesheet" href="./styles.css?v=24" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -241,6 +241,31 @@
               </button>
             </div>
 
+            <div class="decoration-layer-controls" id="decorationLayerControls" hidden>
+              <div class="decoration-layer-controls-heading">
+                <span aria-hidden="true">✦</span>
+                <span>
+                  <strong>装饰内容</strong>
+                  <small>星星与 J 型图案会作为同一图层一起调整</small>
+                </span>
+              </div>
+              <label class="range-field selected-layer-range">
+                <span><span>星星数量</span><output id="selectedStarCountValue">30</output></span>
+                <input id="selectedStarCount" type="range" min="0" max="60" step="1" value="30" />
+              </label>
+              <div class="decoration-layer-content-actions">
+                <label class="switch-label">
+                  <input id="selectedJDecorations" type="checkbox" checked />
+                  <span class="switch" aria-hidden="true"></span>
+                  <span>显示 J 型图案</span>
+                </label>
+                <button class="randomize-stars-button" id="randomizeStarsButton" type="button">
+                  <span aria-hidden="true">✦</span>
+                  随机星星位置
+                </button>
+              </div>
+            </div>
+
             <label class="range-field selected-layer-range">
               <span><span>大小</span><output id="selectedLayerScaleValue">100%</output></span>
               <input id="selectedLayerScale" type="range" min="5" max="240" step="1" value="100" />
@@ -379,24 +404,12 @@
               </div>
             </div>
 
-            <label class="range-field">
-              <span>
-                <span>星星装饰量</span>
-                <output id="densityValue">64%</output>
-              </span>
-              <input id="density" type="range" min="0" max="100" value="64" />
-            </label>
-
-            <div class="toggle-row">
+            <div class="toggle-row single-toggle-row">
               <label class="switch-label">
                 <input id="outline" type="checkbox" checked />
                 <span class="switch" aria-hidden="true"></span>
                 <span>柔光描边</span>
               </label>
-              <button class="shuffle-button" id="shuffleButton" type="button">
-                <span aria-hidden="true">✦</span>
-                换一组星星
-              </button>
             </div>
 
             <details class="artwork-transform legacy-layer-controls">
@@ -953,7 +966,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=29"></script>
+    <script src="./app.js?v=30"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

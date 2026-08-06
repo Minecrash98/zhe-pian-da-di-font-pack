@@ -10,7 +10,6 @@
     backgroundMode: "checker",
     fontStyle: "playful",
     irregularity: 58,
-    density: 64,
     artworkScale: 100,
     artworkX: 50,
     artworkY: 36,
@@ -98,7 +97,10 @@
     y: 50,
     scale: 100,
     rotation: 0,
-    opacity: 100
+    opacity: 100,
+    starCount: 30,
+    showJDecorations: true,
+    layoutSeed: 147
   };
   var layerSequence = 0;
   var textLayerStore = Object.create(null);
@@ -115,6 +117,9 @@
       scale: decorationLayerDefinition.scale,
       rotation: decorationLayerDefinition.rotation,
       opacity: decorationLayerDefinition.opacity,
+      starCount: decorationLayerDefinition.starCount,
+      showJDecorations: decorationLayerDefinition.showJDecorations,
+      layoutSeed: decorationLayerDefinition.layoutSeed,
       defaultX: decorationLayerDefinition.x,
       defaultY: decorationLayerDefinition.y,
       defaultScale: decorationLayerDefinition.scale,
@@ -237,6 +242,11 @@
     selectedLayerLockButton: document.getElementById("selectedLayerLockButton"),
     selectedLayerResetButton: document.getElementById("selectedLayerResetButton"),
     selectedLayerDeleteButton: document.getElementById("selectedLayerDeleteButton"),
+    decorationLayerControls: document.getElementById("decorationLayerControls"),
+    selectedStarCount: document.getElementById("selectedStarCount"),
+    selectedStarCountValue: document.getElementById("selectedStarCountValue"),
+    selectedJDecorations: document.getElementById("selectedJDecorations"),
+    randomizeStarsButton: document.getElementById("randomizeStarsButton"),
     textControlsSection: document.getElementById("textControlsSection"),
     assetLibrarySection: document.getElementById("assetLibrarySection"),
     controlPanel: document.querySelector(".control-panel"),
@@ -250,8 +260,6 @@
     canvasRatioPicker: document.getElementById("canvasRatioPicker"),
     autoCanvasRatioButton: document.getElementById("autoCanvasRatioButton"),
     autoCanvasRatioShape: document.getElementById("autoCanvasRatioShape"),
-    density: document.getElementById("density"),
-    densityValue: document.getElementById("densityValue"),
     artworkScale: document.getElementById("artworkScale"),
     artworkScaleValue: document.getElementById("artworkScaleValue"),
     artworkX: document.getElementById("artworkX"),
@@ -347,7 +355,6 @@
     aboutBackdrop: document.getElementById("aboutBackdrop"),
     aboutCloseButton: document.getElementById("aboutCloseButton"),
     resetButton: document.getElementById("resetButton"),
-    shuffleButton: document.getElementById("shuffleButton"),
     saveAssist: document.getElementById("saveAssist"),
     saveAssistCard: document.getElementById("saveAssistCard"),
     saveAssistTitle: document.getElementById("saveAssistTitle"),
@@ -782,6 +789,13 @@
     return isTextLayer(layer) || isDecorationLayer(layer);
   }
 
+  function decorationLayerHasContent(layer) {
+    return Boolean(
+      isDecorationLayer(layer) &&
+        ((Number(layer.starCount) || 0) > 0 || layer.showJDecorations !== false)
+    );
+  }
+
   function isImageLayer(layer) {
     return Boolean(layer && (layer.type === "image" || layer.type === "gif"));
   }
@@ -966,13 +980,17 @@
       elements.selectedLayerVisibilityButton,
       elements.selectedLayerLockButton,
       elements.selectedLayerResetButton,
-      elements.selectedLayerDeleteButton
+      elements.selectedLayerDeleteButton,
+      elements.selectedStarCount,
+      elements.selectedJDecorations,
+      elements.randomizeStarsButton
     ].forEach(function (control) {
       if (control) {
         control.disabled = !hasLayer;
       }
     });
     if (!layer) {
+      elements.decorationLayerControls.hidden = true;
       elements.selectedLayerName.textContent = "未选择图层";
       elements.selectedLayerType.textContent = "请从图层列表选择";
       elements.selectedLayerPreview.textContent = "—";
@@ -981,6 +999,7 @@
 
     elements.selectedLayerName.textContent = layer.name;
     elements.selectedLayerType.textContent = layerTypeLabel(layer);
+    elements.decorationLayerControls.hidden = !isDecorationLayer(layer);
     elements.selectedLayerPreview.replaceChildren();
     if (isArtworkLayer(layer)) {
       elements.selectedLayerPreview.textContent = layer.thumbnail || "T";
@@ -1022,6 +1041,24 @@
       elements.selectedLayerOpacityValue,
       "%"
     );
+    if (isDecorationLayer(layer)) {
+      layer.starCount = clamp(
+        Number.isFinite(layer.starCount)
+          ? Math.round(layer.starCount)
+          : decorationLayerDefinition.starCount,
+        0,
+        60
+      );
+      layer.showJDecorations = layer.showJDecorations !== false;
+      elements.selectedStarCount.value = layer.starCount;
+      elements.selectedStarCountValue.value = String(layer.starCount);
+      elements.selectedJDecorations.checked = layer.showJDecorations;
+      updateRange(
+        elements.selectedStarCount,
+        elements.selectedStarCountValue,
+        ""
+      );
+    }
 
     var transformLocked = Boolean(layer.locked);
     [
@@ -1030,7 +1067,10 @@
       elements.selectedLayerY,
       elements.selectedLayerRotation,
       elements.selectedLayerOpacity,
-      elements.selectedLayerResetButton
+      elements.selectedLayerResetButton,
+      elements.selectedStarCount,
+      elements.selectedJDecorations,
+      elements.randomizeStarsButton
     ].forEach(function (control) {
       control.disabled = transformLocked;
     });
@@ -1156,6 +1196,26 @@
       ">" +
       layerIconMarkup("reset") +
       "<span>恢复默认位置</span></button>";
+    if (isDecorationLayer(layer)) {
+      wrapper.insertAdjacentHTML(
+        "afterbegin",
+        '<p class="inline-decoration-heading"><span aria-hidden="true">✦</span> 装饰内容</p>' +
+          '<label class="wide"><span>星星数量 <output>' +
+          layer.starCount +
+          '</output></span><input type="range" min="0" max="60" step="1" value="' +
+          layer.starCount +
+          '" data-decoration-property="starCount"' +
+          (locked ? " disabled" : "") +
+          "></label>" +
+          '<label class="wide inline-decoration-toggle"><span><span>显示 J 型图案</span><input type="checkbox" data-decoration-property="showJDecorations"' +
+          (layer.showJDecorations !== false ? " checked" : "") +
+          (locked ? " disabled" : "") +
+          "></span></label>" +
+          '<button type="button" data-layer-action="randomize-stars"' +
+          (locked ? " disabled" : "") +
+          '><span aria-hidden="true">✦</span><span>随机星星位置</span></button>'
+      );
+    }
     wrapper.querySelectorAll("[data-layer-property]").forEach(function (input) {
       var output = input.parentElement.querySelector("output");
       updateRange(
@@ -1164,6 +1224,11 @@
         input.dataset.layerProperty === "rotation" ? "°" : "%"
       );
     });
+    wrapper
+      .querySelectorAll('[data-decoration-property="starCount"]')
+      .forEach(function (input) {
+        updateRange(input, input.parentElement.querySelector("output"), "");
+      });
     return wrapper;
   }
 
@@ -1664,6 +1729,55 @@
     updateCanvasSelection(lastPreviewResult);
     scheduleRender();
     scheduleHistoryCapture();
+  }
+
+  function setDecorationLayerProperty(layer, property, value, output) {
+    if (!isDecorationLayer(layer) || layer.locked) {
+      return;
+    }
+    if (property === "starCount") {
+      layer.starCount = clamp(Math.round(Number(value) || 0), 0, 60);
+      if (output) {
+        output.textContent = String(layer.starCount);
+      }
+    } else if (property === "showJDecorations") {
+      layer.showJDecorations = Boolean(value);
+    } else {
+      return;
+    }
+    if (layer.id === activeLayerId) {
+      syncSelectedLayerControls(layer);
+    }
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function nextDecorationSeed(previousSeed) {
+    var next = 0;
+    if (window.crypto && window.crypto.getRandomValues) {
+      var values = new Uint32Array(1);
+      window.crypto.getRandomValues(values);
+      next = values[0] >>> 0;
+    } else {
+      next =
+        (Date.now() ^ Math.floor(Math.random() * 0xffffffff)) >>> 0;
+    }
+    if (next === (previousSeed >>> 0)) {
+      next = (next + 0x9e3779b9) >>> 0;
+    }
+    return next;
+  }
+
+  function randomizeStarPositions(layer, notifyUser) {
+    if (!isDecorationLayer(layer) || layer.locked) {
+      return;
+    }
+    layer.layoutSeed = nextDecorationSeed(layer.layoutSeed || 0);
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast("星星位置已重新随机");
+    }
   }
 
   function setLayerLocked(layer, locked, notifyUser) {
@@ -3274,83 +3388,119 @@
     ctx.restore();
   }
 
-  function drawReferenceClusters(ctx, width, height, seed) {
-    var density = state.density / 100;
-    if (density < 0.12) {
+  function drawRandomizedStars(
+    ctx,
+    width,
+    height,
+    exclusionRects,
+    seed,
+    requestedCount
+  ) {
+    var count = clamp(Math.round(Number(requestedCount) || 0), 0, 60);
+    if (!count) {
       return;
     }
 
-    var random = mulberry32(seed ^ 0x6cc918);
+    var random = mulberry32((seed >>> 0) ^ 0xa71f23d);
     var base = Math.min(width, height);
-    var blue = state.primaryColor;
-    var sky = state.skyColor;
-    var yellow = state.accentColor;
-    var outline = mixColor(state.primaryColor, "#ffffff", 0.28);
-
-    ctx.save();
-    ctx.globalAlpha *= clamp(0.55 + density * 0.45, 0, 1);
-
-    drawStar(ctx, width * 0.045, height * 0.52, base * 0.05, outline, 5, true, -0.18);
-    drawStar(ctx, width * 0.06, height * 0.65, base * 0.034, sky, 5, false, -0.35);
-    drawStar(ctx, width * 0.125, height * 0.67, base * 0.023, yellow, 5, false, 0.18);
-    drawSparkle(ctx, width * 0.075, height * 0.77, base * 0.018, blue, 0.08);
-
-    drawStar(ctx, width * 0.9, height * 0.57, base * 0.043, yellow, 5, false, 0.12);
-    drawStar(ctx, width * 0.968, height * 0.56, base * 0.055, outline, 5, true, 0.08);
-    drawStar(ctx, width * 0.92, height * 0.7, base * 0.025, sky, 5, false, -0.14);
-    drawSparkle(ctx, width * 0.965, height * 0.75, base * 0.015, blue, 0.12);
-
-    if (density > 0.38) {
-      drawStar(ctx, width * 0.69, height * 0.145, base * 0.025, blue, 6, true, random());
-      drawStar(ctx, width * 0.9, height * 0.1, base * 0.022, blue, 6, true, random());
-      drawSparkle(ctx, width * 0.31, height * 0.12, base * 0.013, sky, random());
-      drawSparkle(ctx, width * 0.55, height * 0.105, base * 0.011, blue, random());
-    }
-
-    ctx.restore();
-  }
-
-  function drawLowerConfetti(ctx, width, height, seed, exclusionRects) {
-    var density = state.density / 100;
-    if (density < 0.18) {
-      return;
-    }
-
-    var random = mulberry32(seed ^ 0x9e2391);
-    var base = Math.min(width, height);
-    var count = Math.round(7 + density * 10);
     var palette = [
       state.primaryColor,
       state.skyColor,
       state.accentColor,
-      mixColor(state.primaryColor, "#ffffff", 0.4)
+      mixColor(state.primaryColor, "#ffffff", 0.38)
     ];
+    var placed = [];
+    var minimumGap = base * (count > 44 ? 0.004 : 0.009);
 
-    for (var i = 0; i < count; i += 1) {
-      var progress = count === 1 ? 0.5 : i / (count - 1);
-      var x = width * (0.075 + progress * 0.85);
-      var y = height * (0.75 + (random() - 0.5) * 0.085);
-      var radius = base * (0.006 + random() * 0.009);
-      var blocked = exclusionRects.some(function (rect) {
-        return pointTouchesRect(x, y, radius * 1.15, rect);
-      });
-      if (blocked) {
-        continue;
+    for (var index = 0; index < count; index += 1) {
+      var point = null;
+      for (var attempt = 0; attempt < 90; attempt += 1) {
+        var x = width * (0.025 + random() * 0.95);
+        var y = height * (0.045 + random() * 0.79);
+        var radius = base * (0.007 + Math.pow(random(), 2) * 0.031);
+        if ((x < width * 0.16 || x > width * 0.84) && random() > 0.58) {
+          radius *= 1.2;
+        }
+        var blockedByText = exclusionRects.some(function (rect) {
+          return pointTouchesRect(x, y, radius * 1.35, rect);
+        });
+        var blockedByStar = placed.some(function (placedPoint) {
+          return (
+            Math.hypot(x - placedPoint.x, y - placedPoint.y) <
+            radius + placedPoint.radius + minimumGap
+          );
+        });
+        if (!blockedByText && !blockedByStar) {
+          point = { x: x, y: y, radius: radius };
+          break;
+        }
+      }
+      if (!point) {
+        for (var fallbackAttempt = 0; fallbackAttempt < 120; fallbackAttempt += 1) {
+          var fallbackX = width * (0.02 + random() * 0.96);
+          var fallbackY = height * (0.04 + random() * 0.8);
+          var fallbackRadius = base * (0.006 + random() * 0.012);
+          var fallbackBlocked = exclusionRects.some(function (rect) {
+            return pointTouchesRect(
+              fallbackX,
+              fallbackY,
+              fallbackRadius * 1.2,
+              rect
+            );
+          });
+          if (!fallbackBlocked) {
+            point = {
+              x: fallbackX,
+              y: fallbackY,
+              radius: fallbackRadius
+            };
+            break;
+          }
+        }
+      }
+      if (!point) {
+        point = {
+          x: width * (0.04 + random() * 0.92),
+          y: height * (0.04 + random() * 0.8),
+          radius: base * 0.006
+        };
       }
 
+      placed.push(point);
       var color = palette[Math.floor(random() * palette.length)];
-      var type = i % 3;
-      if (type === 0) {
-        drawSparkle(ctx, x, y, radius, color, random() * 0.5);
-      } else if (type === 1) {
-        drawStar(ctx, x, y, radius, color, 5, false, random());
+      var type = random();
+      var rotation = random() * Math.PI * 2;
+      if (type < 0.42) {
+        drawStar(
+          ctx,
+          point.x,
+          point.y,
+          point.radius,
+          color,
+          random() > 0.32 ? 5 : 6,
+          random() > 0.68,
+          rotation
+        );
+      } else if (type < 0.72) {
+        drawSparkle(
+          ctx,
+          point.x,
+          point.y,
+          point.radius * 0.9,
+          color,
+          rotation
+        );
+      } else if (type < 0.86) {
+        drawRing(ctx, point.x, point.y, point.radius * 0.75, color);
       } else {
-        ctx.save();
-        ctx.fillStyle = color;
-        ctx.beginPath();
-        ctx.arc(x, y, radius * 0.36, 0, Math.PI * 2);
-        ctx.fill();
-        ctx.restore();
+        drawDotCluster(
+          ctx,
+          point.x,
+          point.y,
+          point.radius * 1.05,
+          color,
+          random
+        );
       }
     }
   }
@@ -3385,111 +3535,28 @@
     ctx.restore();
   }
 
-  function drawUnderlineSwash(ctx, line, centerX, color) {
-    var startX = centerX + line.left + line.totalWidth * 0.06;
-    var length = Math.min(line.totalWidth * 0.28, line.fontSize * 1.5);
-    var y = line.bottom + line.fontSize * 0.06;
-    ctx.save();
-    ctx.strokeStyle = color;
-    ctx.lineWidth = Math.max(2.5, line.fontSize * 0.025);
-    ctx.lineCap = "round";
-    ctx.beginPath();
-    ctx.moveTo(startX, y);
-    ctx.bezierCurveTo(
-      startX + length * 0.23,
-      y + line.fontSize * 0.08,
-      startX + length * 0.7,
-      y + line.fontSize * 0.1,
-      startX + length,
-      y - line.fontSize * 0.03
-    );
-    ctx.stroke();
-    ctx.restore();
-  }
-
-  function drawDecorations(ctx, width, height, exclusionRects, seed) {
-    var density = state.density / 100;
-    if (density <= 0) {
-      return;
-    }
-
-    var random = mulberry32(seed ^ 0xa71f23d);
+  function drawJPatternDecorations(ctx, width, height, seed) {
+    var random = mulberry32((seed >>> 0) ^ 0x6cc918);
     var base = Math.min(width, height);
-    var palette = [
-      state.primaryColor,
-      state.skyColor,
-      state.accentColor,
-      mixColor(state.primaryColor, "#ffffff", 0.43)
-    ];
-    var candidates = [
-      [0.055, 0.18],
-      [0.12, 0.11],
-      [0.2, 0.17],
-      [0.29, 0.08],
-      [0.4, 0.13],
-      [0.51, 0.075],
-      [0.61, 0.14],
-      [0.72, 0.09],
-      [0.82, 0.15],
-      [0.93, 0.1],
-      [0.965, 0.28],
-      [0.045, 0.34],
-      [0.08, 0.48],
-      [0.045, 0.64],
-      [0.105, 0.75],
-      [0.2, 0.78],
-      [0.31, 0.72],
-      [0.42, 0.79],
-      [0.55, 0.73],
-      [0.67, 0.78],
-      [0.79, 0.72],
-      [0.89, 0.78],
-      [0.96, 0.65],
-      [0.92, 0.49],
-      [0.86, 0.34],
-      [0.16, 0.34],
-      [0.75, 0.31],
-      [0.27, 0.52],
-      [0.73, 0.53],
-      [0.51, 0.48]
-    ];
-
-    for (var i = candidates.length - 1; i > 0; i -= 1) {
-      var swapIndex = Math.floor(random() * (i + 1));
-      var temporary = candidates[i];
-      candidates[i] = candidates[swapIndex];
-      candidates[swapIndex] = temporary;
-    }
-
-    var wanted = Math.round(8 + density * 23);
-    var drawn = 0;
-    for (var j = 0; j < candidates.length && drawn < wanted; j += 1) {
-      var x = candidates[j][0] * width;
-      var y = candidates[j][1] * height;
-      var radius = base * (0.014 + random() * 0.025);
-      var blocked = exclusionRects.some(function (rect) {
-        return pointTouchesRect(x, y, radius * 1.4, rect);
-      });
-      if (blocked) {
-        continue;
-      }
-
-      var color = palette[Math.floor(random() * palette.length)];
-      var type = Math.floor(random() * 5);
-      var rotation = random() * Math.PI;
-      if (type === 0) {
-        drawStar(ctx, x, y, radius, color, 5, false, rotation);
-      } else if (type === 1) {
-        drawStar(ctx, x, y, radius, color, 6, true, rotation);
-      } else if (type === 2) {
-        drawSparkle(ctx, x, y, radius * 0.95, color, rotation);
-      } else if (type === 3) {
-        drawRing(ctx, x, y, radius * 0.8, color);
-      } else {
-        drawDotCluster(ctx, x, y, radius * 1.1, color, random);
-      }
-      drawn += 1;
-    }
+    var color = mixColor(state.primaryColor, "#00101d", 0.08);
+    var leftSize = base * (0.078 + random() * 0.025);
+    var rightSize = base * (0.078 + random() * 0.025);
+    drawSideCurl(
+      ctx,
+      width * (0.09 + random() * 0.045),
+      height * (0.56 + random() * 0.15),
+      leftSize,
+      1,
+      color
+    );
+    drawSideCurl(
+      ctx,
+      width * (0.91 - random() * 0.045),
+      height * (0.56 + random() * 0.15),
+      rightSize,
+      -1,
+      color
+    );
   }
 
   function drawGlyphLine(ctx, line, centerX, options) {
@@ -3582,21 +3649,6 @@
     return anchors;
   }
 
-  function strokeLetteringPath(ctx, path, width, color, outlineColor) {
-    ctx.save();
-    ctx.lineCap = "round";
-    ctx.lineJoin = "round";
-    if (state.outline) {
-      ctx.strokeStyle = rgba(outlineColor, 0.96);
-      ctx.lineWidth = width + Math.max(2.2, width * 0.23);
-      ctx.stroke(path);
-    }
-    ctx.strokeStyle = color;
-    ctx.lineWidth = width;
-    ctx.stroke(path);
-    ctx.restore();
-  }
-
   function drawFlowerBadge(ctx, x, y, radius, color, outlineColor, rotation) {
     ctx.save();
     drawStar(ctx, x, y, radius * 1.13, outlineColor, 6, false, rotation);
@@ -3608,13 +3660,13 @@
     ctx.restore();
   }
 
-  function drawAttachedGlyphGrammar(ctx, line, centerX, lineIndex, seed) {
+  function drawAttachedGlyphGrammar(ctx, line, centerX, lineIndex) {
     var template = line.template;
     if (
       !template ||
       !template.attachments ||
       !template.attachments.enabled ||
-      state.density < 8
+      !template.attachments.topFlowers
     ) {
       return;
     }
@@ -3625,145 +3677,10 @@
     }
 
     var amount = state.irregularity / 100;
-    var density = state.density / 100;
     var size = line.fontSize;
     var main = state.primaryColor;
     var outlineColor = mixColor(state.skyColor, "#ffffff", 0.76);
-    var first = anchors[0];
-    var last = anchors[anchors.length - 1];
-    var attachmentSeed =
-      (typeof seed === "number" ? seed : state.seed) ^
-      Math.imul(lineIndex + 1, 0x9e3779b1) ^
-      0x68bc21eb;
-    var attachmentRandom = mulberry32(attachmentSeed >>> 0);
-    var curlDirection = attachmentRandom() < 0.5 ? -1 : 1;
-    var curlLift = 0.09 + attachmentRandom() * 0.12;
-    var curlDrift = 0.02 + attachmentRandom() * 0.1;
-    var tailLift = 0.24 + attachmentRandom() * 0.12;
-    var tailDrift = 0.02 + attachmentRandom() * 0.09;
-    var firstAtlasMeta =
-      first.glyph.fontKey && first.glyph.fontKey.indexOf("atlas:") === 0 && styleEngine
-      ? styleEngine.getAtlasMeta(first.glyph.char, template)
-      : null;
-    var lastAtlasMeta =
-      last.glyph.fontKey && last.glyph.fontKey.indexOf("atlas:") === 0 && styleEngine
-      ? styleEngine.getAtlasMeta(last.glyph.char, template)
-      : null;
-
-    if (
-      template.attachments.firstHook &&
-      amount > 0.14 &&
-      !firstAtlasMeta
-    ) {
-      var hook = new Path2D();
-      var hookY = first.top + size * 0.23;
-      hook.moveTo(first.left + size * 0.31, hookY + size * 0.06);
-      hook.bezierCurveTo(
-        first.left - size * 0.07,
-        hookY + size * 0.11,
-        first.left - size * 0.17,
-        hookY - size * 0.22,
-        first.left + size * 0.03,
-        hookY - size * 0.25
-      );
-      hook.bezierCurveTo(
-        first.left + size * 0.2,
-        hookY - size * 0.26,
-        first.left + size * 0.21,
-        hookY - size * 0.05,
-        first.left + size * 0.09,
-        hookY - size * 0.04
-      );
-      strokeLetteringPath(
-        ctx,
-        hook,
-        Math.max(4, size * (0.055 + amount * 0.012)),
-        main,
-        outlineColor
-      );
-    }
-
-    if (firstAtlasMeta && firstAtlasMeta.firstHook && density > 0.22) {
-      drawSideCurl(
-        ctx,
-        first.left - size * 0.045,
-        first.baseline + size * 0.09,
-        size * 0.3,
-        1,
-        main
-      );
-    }
-
-    if (
-      template.attachments.terminalCurl &&
-      amount > 0.08 &&
-      !(lastAtlasMeta && lastAtlasMeta.terminalCurl)
-    ) {
-      var curl = new Path2D();
-      var curlAnchor = curlDirection > 0 ? last : first;
-      var curlEdge = curlDirection > 0 ? curlAnchor.right : curlAnchor.left;
-      var curlStartX = curlEdge + curlDirection * size * curlDrift;
-      var curlY = curlAnchor.baseline - size * curlLift;
-      curl.moveTo(curlStartX, curlY);
-      curl.bezierCurveTo(
-        curlStartX + curlDirection * size * 0.33,
-        curlY + size * 0.3,
-        curlStartX + curlDirection * size * 0.65,
-        curlY + size * 0.22,
-        curlStartX + curlDirection * size * 0.58,
-        curlY - size * 0.02
-      );
-      curl.bezierCurveTo(
-        curlStartX + curlDirection * size * 0.54,
-        curlY - size * 0.18,
-        curlStartX + curlDirection * size * 0.35,
-        curlY - size * 0.16,
-        curlStartX + curlDirection * size * 0.4,
-        curlY - size * 0.03
-      );
-      strokeLetteringPath(
-        ctx,
-        curl,
-        Math.max(3.4, size * 0.033),
-        main,
-        outlineColor
-      );
-    }
-
-    if (template.attachments.underlineTail && lineIndex > 0 && anchors.length > 1) {
-      var tail = new Path2D();
-      var tailDirection = -curlDirection;
-      var tailAnchor = tailDirection > 0 ? last : first;
-      var tailEdge = tailDirection > 0 ? tailAnchor.right : tailAnchor.left;
-      var tailStart = tailEdge + tailDirection * size * tailDrift;
-      var tailY = tailAnchor.baseline - size * tailLift;
-      tail.moveTo(tailStart, tailY);
-      tail.bezierCurveTo(
-        tailStart + tailDirection * size * 0.12,
-        tailY + size * 0.36,
-        tailStart + tailDirection * size * 0.61,
-        tailY + size * 0.4,
-        tailStart + tailDirection * size * 0.58,
-        tailY + size * 0.2
-      );
-      tail.bezierCurveTo(
-        tailStart + tailDirection * size * 0.56,
-        tailY + size * 0.06,
-        tailStart + tailDirection * size * 0.36,
-        tailY + size * 0.08,
-        tailStart + tailDirection * size * 0.43,
-        tailY + size * 0.18
-      );
-      strokeLetteringPath(
-        ctx,
-        tail,
-        Math.max(4, size * 0.052),
-        main,
-        outlineColor
-      );
-    }
-
-    if (template.attachments.topFlowers && density > 0.3 && anchors.length > 2) {
+    if (amount > 0.3 && anchors.length > 2) {
       var primaryIndex = lineIndex === 0
         ? Math.min(anchors.length - 2, Math.max(1, Math.floor(anchors.length * 0.66)))
         : Math.min(anchors.length - 1, Math.max(1, Math.floor(anchors.length * 0.3)));
@@ -3778,7 +3695,7 @@
         -0.12
       );
 
-      if (lineIndex > 0 && anchors.length > 4 && density > 0.56) {
+      if (lineIndex > 0 && anchors.length > 4 && amount > 0.56) {
         var secondaryAnchor = anchors[Math.min(anchors.length - 2, Math.floor(anchors.length * 0.74))];
         drawFlowerBadge(
           ctx,
@@ -3920,9 +3837,7 @@
     height,
     layer,
     entry,
-    activeTemplate,
-    pixelScale,
-    anchorTitleLayerId
+    pixelScale
   ) {
     if (!entry) {
       return;
@@ -3937,52 +3852,15 @@
 
     if (entry.kind === "subtitle") {
       drawSubtitle(ctx, entry.layout, 0);
-      if (state.density > 10) {
-        drawSubtitleFlourish(
-          ctx,
-          entry.layout,
-          0,
-          width,
-          entry.seed
-        );
-      }
+      drawSubtitleFlourish(
+        ctx,
+        entry.layout,
+        0,
+        width,
+        entry.seed
+      );
       ctx.restore();
       return;
-    }
-
-    var usesAttachedGrammar = Boolean(
-      activeTemplate &&
-        activeTemplate.attachments &&
-        activeTemplate.attachments.enabled
-    );
-    if (
-      layer.id === anchorTitleLayerId &&
-      state.density > 18 &&
-      !usesAttachedGrammar
-    ) {
-      var line = entry.layout;
-      var curlSize = Math.min(line.fontSize * 0.45, width * 0.055);
-      var curlY = line.y + line.fontSize * 0.22;
-      var color = mixColor(state.primaryColor, "#00101d", 0.08);
-      drawSideCurl(
-        ctx,
-        line.left - curlSize * 0.26,
-        curlY,
-        curlSize,
-        1,
-        color
-      );
-      drawSideCurl(
-        ctx,
-        line.right + curlSize * 0.26,
-        curlY,
-        curlSize,
-        -1,
-        color
-      );
-      if (state.density > 42) {
-        drawUnderlineSwash(ctx, line, 0, color);
-      }
     }
 
     if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
@@ -3996,8 +3874,7 @@
       ctx,
       entry.layout,
       0,
-      layer.lineIndex,
-      entry.seed
+      layer.lineIndex
     );
     ctx.restore();
   }
@@ -4007,10 +3884,12 @@
     width,
     height,
     layer,
-    exclusionRects,
-    combinedSeed
+    exclusionRects
   ) {
     var scale = clamp(layer.scale / 100, 0.2, 2.4);
+    var layoutSeed = Number.isFinite(layer.layoutSeed)
+      ? layer.layoutSeed >>> 0
+      : decorationLayerDefinition.layoutSeed;
     ctx.save();
     ctx.globalAlpha = clamp(
       (Number.isFinite(layer.opacity) ? layer.opacity : 100) / 100,
@@ -4021,9 +3900,22 @@
     ctx.rotate((layer.rotation * Math.PI) / 180);
     ctx.scale(scale, scale);
     ctx.translate(-width / 2, -height / 2);
-    drawReferenceClusters(ctx, width, height, combinedSeed);
-    drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
-    drawLowerConfetti(ctx, width, height, combinedSeed, exclusionRects);
+    drawRandomizedStars(
+      ctx,
+      width,
+      height,
+      exclusionRects,
+      layoutSeed,
+      layer.starCount
+    );
+    if (layer.showJDecorations !== false) {
+      drawJPatternDecorations(
+        ctx,
+        width,
+        height,
+        layoutSeed
+      );
+    }
     ctx.restore();
   }
 
@@ -4063,10 +3955,6 @@
     var runtimeAtlasMode = Boolean(
       activeTemplate && activeTemplate.atlasEnabled
     );
-    var combinedSeed =
-      (state.seed +
-        hashString(line1Text + "|" + line2Text + "|" + subtitleText)) >>>
-      0;
     var textLayouts = Object.create(null);
 
     if (line1Text) {
@@ -4151,16 +4039,6 @@
         Math.min(width, height) * 0.012
       );
     });
-    var anchorTitleLayer = getLayer("text-line-2");
-    if (
-      !anchorTitleLayer ||
-      !anchorTitleLayer.visible ||
-      !textLayouts[anchorTitleLayer.id]
-    ) {
-      anchorTitleLayer = getLayer("text-line-1");
-    }
-    var anchorTitleLayerId = anchorTitleLayer ? anchorTitleLayer.id : "";
-
     function drawCompositionLayer(layer) {
       if (!layer.visible) {
         return;
@@ -4180,9 +4058,7 @@
           height,
           layer,
           textLayouts[layer.id],
-          activeTemplate,
-          pixelScale,
-          anchorTitleLayerId
+          pixelScale
         );
       } else if (isDecorationLayer(layer)) {
         drawGeneratedDecorationLayer(
@@ -4190,8 +4066,7 @@
           width,
           height,
           layer,
-          exclusionRects,
-          combinedSeed
+          exclusionRects
         );
       }
     }
@@ -4251,7 +4126,7 @@
       isEmpty:
         !visibleTextLayers.length &&
         !layers.some(function (layer) {
-          return isDecorationLayer(layer) && layer.visible && state.density > 0;
+          return decorationLayerHasContent(layer) && layer.visible;
         }) &&
         !getImageLayers().some(function (layer) {
           return layer.visible && imageForLayer(layer, renderTime, forcedLayerImages);
@@ -4264,7 +4139,6 @@
     state.line2 = elements.line2.value;
     state.subtitle = elements.subtitle.value;
     state.canvasSize = elements.canvasSize.value;
-    state.density = Number(elements.density.value);
     state.artworkScale = Number(elements.artworkScale.value);
     state.artworkX = Number(elements.artworkX.value);
     state.artworkY = Number(elements.artworkY.value);
@@ -4341,7 +4215,6 @@
     elements.line1Count.value = graphemeCount(state.line1);
     elements.line2Count.value = graphemeCount(state.line2);
     elements.subtitleCount.value = graphemeCount(state.subtitle);
-    updateRange(elements.density, elements.densityValue);
     updateRange(elements.artworkScale, elements.artworkScaleValue);
     updateRange(elements.artworkX, elements.artworkXValue);
     updateRange(elements.artworkY, elements.artworkYValue);
@@ -4400,7 +4273,7 @@
       getLayer("text-line-2") ? state.line2 : "",
       getLayer("text-subtitle") ? state.subtitle : "",
       layers.some(function (layer) {
-        return isDecorationLayer(layer) && layer.visible && state.density > 0;
+        return decorationLayerHasContent(layer) && layer.visible;
       })
         ? "星星装饰"
         : "",
@@ -4515,6 +4388,9 @@
       defaultScale: layer.defaultScale,
       defaultRotation: layer.defaultRotation,
       defaultOpacity: layer.defaultOpacity,
+      starCount: layer.starCount,
+      showJDecorations: layer.showJDecorations,
+      layoutSeed: layer.layoutSeed,
       officialAsset: layer.officialAsset || null,
       objectUrl: layer.objectUrl || ""
     };
@@ -4655,7 +4531,6 @@
     elements.line2.value = state.line2;
     elements.subtitle.value = state.subtitle;
     elements.canvasSize.value = state.canvasSize;
-    elements.density.value = state.density;
     elements.artworkScale.value = state.artworkScale;
     elements.artworkX.value = state.artworkX;
     elements.artworkY.value = state.artworkY;
@@ -5434,7 +5309,6 @@
     elements.line2,
     elements.subtitle,
     elements.canvasSize,
-    elements.density,
     elements.artworkScale,
     elements.artworkX,
     elements.artworkY,
@@ -5526,6 +5400,24 @@
   elements.selectedLayerDeleteButton.addEventListener("click", function () {
     removeLayer(activeLayerId, true);
   });
+  elements.selectedStarCount.addEventListener("input", function () {
+    setDecorationLayerProperty(
+      getActiveLayer(),
+      "starCount",
+      elements.selectedStarCount.value,
+      elements.selectedStarCountValue
+    );
+  });
+  elements.selectedJDecorations.addEventListener("input", function () {
+    setDecorationLayerProperty(
+      getActiveLayer(),
+      "showJDecorations",
+      elements.selectedJDecorations.checked
+    );
+  });
+  elements.randomizeStarsButton.addEventListener("click", function () {
+    randomizeStarPositions(getActiveLayer(), true);
+  });
 
   elements.editorSectionTabs.forEach(function (button) {
     button.addEventListener("click", function () {
@@ -5584,16 +5476,31 @@
 
   elements.layerList.addEventListener("input", function (event) {
     var control = event.target.closest("[data-layer-property]");
+    var decorationControl = event.target.closest(
+      "[data-decoration-property]"
+    );
     var item = event.target.closest(".layer-item");
-    if (!control || !item) {
+    if ((!control && !decorationControl) || !item) {
       return;
     }
-    var output = control.parentElement.querySelector("output");
-    setLayerProperty(
-      getLayer(item.dataset.layerId),
-      control.dataset.layerProperty,
-      control.value,
-      output
+    var layer = getLayer(item.dataset.layerId);
+    if (control) {
+      var output = control.parentElement.querySelector("output");
+      setLayerProperty(
+        layer,
+        control.dataset.layerProperty,
+        control.value,
+        output
+      );
+      return;
+    }
+    setDecorationLayerProperty(
+      layer,
+      decorationControl.dataset.decorationProperty,
+      decorationControl.type === "checkbox"
+        ? decorationControl.checked
+        : decorationControl.value,
+      decorationControl.parentElement.querySelector("output")
     );
   });
 
@@ -5638,6 +5545,16 @@
         });
         resetLayerTransform(layer);
         showToast(layer.name + "已恢复默认位置");
+        event.stopPropagation();
+        return;
+      }
+      if (action === "randomize-stars") {
+        selectLayer(layer.id, {
+          showSelection: true,
+          render: false,
+          syncEditorSection: false
+        });
+        randomizeStarPositions(layer, true);
         event.stopPropagation();
         return;
       }
@@ -5848,13 +5765,6 @@
       scheduleRender();
       scheduleHistoryCapture();
     });
-  });
-
-  elements.shuffleButton.addEventListener("click", function () {
-    state.seed = (state.seed + 7919) >>> 0;
-    scheduleRender();
-    scheduleHistoryCapture();
-    showToast("星星换好啦");
   });
 
   elements.resetArtworkButton.addEventListener("click", function () {

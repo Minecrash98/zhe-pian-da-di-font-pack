@@ -972,26 +972,6 @@ details[open] > .precision-summary .precision-chevron {
   outline-offset: 2px;
 }
 
-.shuffle-button {
-  padding: 8px 10px;
-  border: 1px solid #d7dcdb;
-  border-radius: 10px;
-  color: #58666e;
-  background: #fff;
-  font-size: 10px;
-  font-weight: 700;
-}
-
-.shuffle-button span {
-  margin-right: 4px;
-  color: var(--yellow);
-}
-
-.shuffle-button:hover {
-  color: var(--blue);
-  border-color: #b7d8ec;
-}
-
 .color-grid {
   display: grid;
   grid-template-columns: repeat(3, 1fr);
@@ -3016,6 +2996,96 @@ details[open] > .precision-summary .precision-chevron {
   border-color: #9fc9df;
 }
 
+.decoration-layer-controls {
+  display: grid;
+  gap: 13px;
+  margin: -2px 0 18px;
+  padding: 13px;
+  border: 1px solid #cfe2eb;
+  border-radius: 12px;
+  background: linear-gradient(145deg, #f4fbff, #fffaf0);
+}
+
+.decoration-layer-controls[hidden] {
+  display: none;
+}
+
+.decoration-layer-controls-heading {
+  display: flex;
+  min-width: 0;
+  align-items: center;
+  gap: 9px;
+}
+
+.decoration-layer-controls-heading > span:first-child {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 9px;
+  color: #755a08;
+  background: var(--yellow);
+  font-size: 15px;
+}
+
+.decoration-layer-controls-heading strong,
+.decoration-layer-controls-heading small {
+  display: block;
+}
+
+.decoration-layer-controls-heading strong {
+  color: #32464f;
+  font-size: 10px;
+}
+
+.decoration-layer-controls-heading small {
+  margin-top: 2px;
+  color: #819097;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.decoration-layer-content-actions {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.decoration-layer-content-actions .switch-label {
+  min-height: 36px;
+  font-size: 9px;
+}
+
+.randomize-stars-button {
+  min-height: 36px;
+  padding: 0 10px;
+  border: 1px solid #bad7e6;
+  border-radius: 9px;
+  color: #285c78;
+  background: #fff;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.randomize-stars-button span {
+  margin-right: 4px;
+  color: #d89b00;
+}
+
+.randomize-stars-button:hover:not(:disabled) {
+  color: var(--blue);
+  border-color: #69acd1;
+}
+
+.randomize-stars-button:disabled,
+.decoration-layer-content-actions input:disabled + .switch {
+  cursor: not-allowed;
+  opacity: 0.45;
+}
+
 .selected-layer-position-grid {
   gap: 10px;
 }
@@ -3392,6 +3462,30 @@ details[open] > .precision-summary .precision-chevron {
     color: #5c6d74;
     font-size: 10px;
     font-weight: 800;
+  }
+
+  .inline-decoration-heading {
+    grid-column: 1 / -1;
+    margin: 0 0 -1px;
+    color: #3f6578;
+    font-size: 10px;
+    font-weight: 900;
+  }
+
+  .inline-decoration-heading span,
+  .layer-inline-properties [data-layer-action="randomize-stars"] > span:first-child {
+    color: #d99b00;
+  }
+
+  .inline-decoration-toggle > span {
+    min-height: 31px;
+    align-items: center;
+  }
+
+  .inline-decoration-toggle input {
+    width: 20px;
+    height: 20px;
+    accent-color: var(--blue);
   }
 
   .layer-inline-properties output {

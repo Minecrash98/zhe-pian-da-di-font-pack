@@ -5430,7 +5430,7 @@
 
   function cacheRefreshUrls() {
     var urls = [
-      "./assets/font-atlas/runtime-glyph-index.json?v=4",
+      "./assets/font-atlas/runtime-glyph-index.json?v=5",
       "./assets/fonts/LongCang-Regular.ttf",
       "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
       "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
@@ -6963,7 +6963,7 @@
           kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
           kalam: "./assets/fonts/Kalam-Bold.ttf",
           princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-        }, "./assets/font-atlas/runtime-glyph-index.json?v=4", function (progress) {
+        }, "./assets/font-atlas/runtime-glyph-index.json?v=5", function (progress) {
           setFontLoadingProgress(progress * 92);
         });
       })

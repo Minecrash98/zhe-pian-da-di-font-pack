@@ -4903,13 +4903,26 @@
     };
   }
 
-  function updateRange(range, output, suffix) {
-    var min = Number(range.min) || 0;
-    var max = Number(range.max) || 100;
+  function updateRangeProgress(range) {
+    if (!range) {
+      return;
+    }
+    var min = Number(range.min);
+    var max = Number(range.max);
     var value = Number(range.value);
-    var progress = ((value - min) / (max - min)) * 100;
+    min = Number.isFinite(min) ? min : 0;
+    max = Number.isFinite(max) ? max : 100;
+    value = Number.isFinite(value) ? value : min;
+    var progress = max === min ? 0 : ((value - min) / (max - min)) * 100;
+    progress = clamp(progress, 0, 100);
     range.style.setProperty("--range-progress", progress + "%");
-    output.value = value + (suffix == null ? "%" : suffix);
+  }
+
+  function updateRange(range, output, suffix) {
+    updateRangeProgress(range);
+    if (output) {
+      output.value = range.value + (suffix == null ? "%" : suffix);
+    }
   }
 
   function updateBackgroundInterface() {
@@ -6096,6 +6109,20 @@
       begin();
     });
   }
+
+  function syncChangedRangeProgress(event) {
+    var range = event.target;
+    if (
+      range &&
+      range.matches &&
+      range.matches('input[type="range"]')
+    ) {
+      updateRangeProgress(range);
+    }
+  }
+
+  document.addEventListener("input", syncChangedRangeProgress, true);
+  document.addEventListener("change", syncChangedRangeProgress, true);
 
   [
     elements.line1,

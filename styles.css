@@ -5612,6 +5612,33 @@ body::before {
   font-weight: 900;
 }
 
+.welcome-browser-tip {
+  display: flex;
+  margin: -5px 2px 16px;
+  align-items: flex-start;
+  gap: 7px;
+  color: #327b98;
+  font-size: 9px;
+  font-weight: 750;
+  line-height: 1.55;
+}
+
+.welcome-browser-tip > span {
+  display: grid;
+  width: 16px;
+  height: 16px;
+  flex: 0 0 auto;
+  margin-top: -1px;
+  place-items: center;
+  border: 1px solid rgba(50, 123, 152, 0.48);
+  border-radius: 50%;
+  font-family: Georgia, serif;
+  font-size: 9px;
+  font-style: italic;
+  font-weight: 700;
+  line-height: 1;
+}
+
 .welcome-start-button {
   display: flex;
   width: 100%;
@@ -5786,9 +5813,16 @@ body::before {
   }
 
   .welcome-disclaimer {
-    margin: 13px 1px 14px;
+    margin: 13px 1px 11px;
     font-size: 9px;
     line-height: 1.6;
+  }
+
+  .welcome-browser-tip {
+    margin: -2px 1px 13px;
+    gap: 6px;
+    font-size: 8px;
+    line-height: 1.5;
   }
 
   .welcome-start-button {

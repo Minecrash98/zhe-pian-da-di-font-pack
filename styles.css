@@ -2841,6 +2841,7 @@ details[open] > .precision-summary .precision-chevron {
 .topbar-link-button svg,
 .topbar-icon-link svg,
 .history-toolbar svg,
+.mobile-history-toolbar svg,
 .selected-layer-quick-actions svg,
 .layer-inline-button svg,
 .layer-entry-actions svg,
@@ -2853,6 +2854,10 @@ details[open] > .precision-summary .precision-chevron {
   stroke-width: 1.8;
   stroke-linecap: round;
   stroke-linejoin: round;
+}
+
+.mobile-history-toolbar {
+  display: none;
 }
 
 .history-toolbar {
@@ -2996,7 +3001,8 @@ details[open] > .precision-summary .precision-chevron {
   border-color: #9fc9df;
 }
 
-.decoration-layer-controls {
+.decoration-layer-controls,
+.group-layer-controls {
   display: grid;
   gap: 13px;
   margin: -2px 0 18px;
@@ -3006,7 +3012,8 @@ details[open] > .precision-summary .precision-chevron {
   background: linear-gradient(145deg, #f4fbff, #fffaf0);
 }
 
-.decoration-layer-controls[hidden] {
+.decoration-layer-controls[hidden],
+.group-layer-controls[hidden] {
   display: none;
 }
 
@@ -3027,6 +3034,11 @@ details[open] > .precision-summary .precision-chevron {
   color: #755a08;
   background: var(--yellow);
   font-size: 15px;
+}
+
+.group-layer-controls .decoration-layer-controls-heading > span:first-child {
+  font-size: 8px;
+  font-weight: 900;
 }
 
 .decoration-layer-controls-heading strong,
@@ -3115,6 +3127,53 @@ details[open] > .precision-summary .precision-chevron {
   color: #b7473d;
   border-color: #e8c1bc;
   background: #fff8f7;
+}
+
+.advanced-layer-mode-card {
+  display: flex;
+  min-width: 0;
+  margin: 0 0 12px;
+  padding: 11px 12px;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  border: 1px solid #cedee6;
+  border-radius: 12px;
+  background: linear-gradient(135deg, #f4fbff, #fffaf0);
+}
+
+.advanced-layer-mode-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.advanced-layer-mode-copy strong {
+  color: #334a55;
+  font-size: 10px;
+}
+
+.advanced-layer-mode-copy small {
+  color: #7b8b92;
+  font-size: 7px;
+  line-height: 1.45;
+}
+
+.advanced-layer-mode-switch {
+  min-width: 72px;
+  flex: 0 0 auto;
+  justify-content: flex-end;
+  color: #477084;
+  font-size: 8px;
+  font-weight: 900;
+}
+
+.text-layer-toggle.is-mode-locked {
+  cursor: default;
+}
+
+.text-layer-toggle.is-mode-locked .text-layer-toggle-index {
+  background: linear-gradient(135deg, var(--blue), #56b9d9);
 }
 
 .text-layer-field {
@@ -4532,7 +4591,7 @@ body::before {
 
 .color-target-grid {
   display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
+  grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 7px;
 }
 
@@ -4599,6 +4658,13 @@ body::before {
   border: 1px solid #dce3e3;
   border-radius: 12px;
   background: #f7f9f8;
+}
+
+.shadow-inline-color-editor {
+  margin: 0 0 14px;
+  padding: 11px;
+  border-color: #ded7d1;
+  background: #fffaf6;
 }
 
 .color-editor-topline {
@@ -5081,5 +5147,67 @@ body::before {
     width: 34px;
     min-width: 34px;
     height: 32px;
+  }
+}
+
+/* Mobile history lives on the canvas instead of taking an inspector row. */
+@media (max-width: 900px) {
+  .history-toolbar {
+    display: none;
+  }
+
+  .preview-panel {
+    position: relative;
+  }
+
+  .mobile-history-toolbar {
+    position: absolute;
+    z-index: 14;
+    top: 17px;
+    right: 17px;
+    display: flex;
+    gap: 4px;
+    padding: 4px;
+    border: 1px solid rgba(91, 107, 114, 0.28);
+    border-radius: 11px;
+    background: rgba(250, 252, 252, 0.9);
+    box-shadow: 0 4px 14px rgba(31, 43, 49, 0.16);
+    backdrop-filter: blur(8px);
+    transition: opacity 150ms ease, transform 150ms ease;
+  }
+
+  .mobile-history-toolbar.is-empty {
+    opacity: 0;
+    pointer-events: none;
+    transform: translateY(-4px);
+  }
+
+  .mobile-history-toolbar button {
+    display: grid;
+    width: 34px;
+    height: 34px;
+    padding: 0;
+    place-items: center;
+    border: 0;
+    border-radius: 8px;
+    color: #34464f;
+    background: transparent;
+  }
+
+  .mobile-history-toolbar button:active:not(:disabled) {
+    color: var(--blue);
+    background: #e4f3fb;
+  }
+
+  .mobile-history-toolbar button:disabled {
+    cursor: not-allowed;
+    opacity: 0.34;
+  }
+}
+
+@media (max-width: 560px) {
+  .mobile-history-toolbar {
+    top: 13px;
+    right: 13px;
   }
 }

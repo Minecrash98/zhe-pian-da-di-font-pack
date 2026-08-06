@@ -10,9 +10,12 @@
     backgroundMode: "checker",
     fontStyle: "playful",
     irregularity: 58,
+    advancedLayerMode: false,
+    lineGap: 110,
+    subtitleGap: 100,
     artworkScale: 100,
     artworkX: 50,
-    artworkY: 36,
+    artworkY: 50,
     artworkRotation: 0,
     outline: true,
     titleShadowEnabled: true,
@@ -102,8 +105,25 @@
     showJDecorations: true,
     layoutSeed: 147
   };
+  var letteringGroupDefinition = {
+    id: "lettering-group",
+    type: "lettering-group",
+    sourceType: "lettering-group",
+    name: "字标组合",
+    thumbnail: "T✦",
+    x: 50,
+    y: 50,
+    scale: 100,
+    rotation: 0,
+    opacity: 100,
+    starCount: 30,
+    showJDecorations: true,
+    layoutSeed: 147
+  };
   var layerSequence = 0;
   var textLayerStore = Object.create(null);
+  var decorationLayerStore = null;
+  var letteringGroupStore = null;
 
   function createDefaultDecorationLayer() {
     return {
@@ -130,6 +150,32 @@
     };
   }
 
+  function createDefaultLetteringGroupLayer() {
+    return {
+      id: letteringGroupDefinition.id,
+      type: letteringGroupDefinition.type,
+      sourceType: letteringGroupDefinition.sourceType,
+      name: letteringGroupDefinition.name,
+      thumbnail: letteringGroupDefinition.thumbnail,
+      x: letteringGroupDefinition.x,
+      y: letteringGroupDefinition.y,
+      scale: letteringGroupDefinition.scale,
+      rotation: letteringGroupDefinition.rotation,
+      opacity: letteringGroupDefinition.opacity,
+      starCount: letteringGroupDefinition.starCount,
+      showJDecorations: letteringGroupDefinition.showJDecorations,
+      layoutSeed: letteringGroupDefinition.layoutSeed,
+      defaultX: letteringGroupDefinition.x,
+      defaultY: letteringGroupDefinition.y,
+      defaultScale: letteringGroupDefinition.scale,
+      defaultRotation: letteringGroupDefinition.rotation,
+      defaultOpacity: letteringGroupDefinition.opacity,
+      visible: true,
+      locked: false,
+      lastIndex: 0
+    };
+  }
+
   function createDefaultTextLayers() {
     textLayerStore = Object.create(null);
     textLayerDefinitions.forEach(function (definition) {
@@ -152,22 +198,20 @@
         defaultOpacity: definition.opacity,
         visible: true,
         locked: false,
+        advancedActive: true,
         lastIndex: 0
       };
     });
-    return [
-      createDefaultDecorationLayer(),
-      textLayerStore["text-subtitle"],
-      textLayerStore["text-line-2"],
-      textLayerStore["text-line-1"]
-    ];
+    decorationLayerStore = createDefaultDecorationLayer();
+    letteringGroupStore = createDefaultLetteringGroupLayer();
+    return [letteringGroupStore];
   }
 
   var layers = createDefaultTextLayers();
-  var activeLayerId = "text-line-1";
+  var activeLayerId = "lettering-group";
   var draggedLayerId = "";
   var animationStartedAt = performance.now();
-  var activeDragTarget = "text-line-1";
+  var activeDragTarget = "lettering-group";
   var activeColorTarget = "primaryColor";
   var canvasSelectionVisible = false;
   var canvasDragging = false;
@@ -222,6 +266,9 @@
     activeLayerSummary: document.getElementById("activeLayerSummary"),
     undoButton: document.getElementById("undoButton"),
     redoButton: document.getElementById("redoButton"),
+    mobileUndoButton: document.getElementById("mobileUndoButton"),
+    mobileRedoButton: document.getElementById("mobileRedoButton"),
+    mobileHistoryToolbar: document.getElementById("mobileHistoryToolbar"),
     layerPropertiesSection: document.getElementById("layerPropertiesSection"),
     selectedLayerPreview: document.getElementById("selectedLayerPreview"),
     selectedLayerType: document.getElementById("selectedLayerType"),
@@ -247,6 +294,29 @@
     selectedStarCountValue: document.getElementById("selectedStarCountValue"),
     selectedJDecorations: document.getElementById("selectedJDecorations"),
     randomizeStarsButton: document.getElementById("randomizeStarsButton"),
+    groupLayerControls: document.getElementById("groupLayerControls"),
+    selectedGroupLineGap: document.getElementById("selectedGroupLineGap"),
+    selectedGroupLineGapValue: document.getElementById(
+      "selectedGroupLineGapValue"
+    ),
+    selectedGroupSubtitleGap: document.getElementById(
+      "selectedGroupSubtitleGap"
+    ),
+    selectedGroupSubtitleGapValue: document.getElementById(
+      "selectedGroupSubtitleGapValue"
+    ),
+    selectedGroupStarCount: document.getElementById(
+      "selectedGroupStarCount"
+    ),
+    selectedGroupStarCountValue: document.getElementById(
+      "selectedGroupStarCountValue"
+    ),
+    selectedGroupJDecorations: document.getElementById(
+      "selectedGroupJDecorations"
+    ),
+    randomizeGroupStarsButton: document.getElementById(
+      "randomizeGroupStarsButton"
+    ),
     textControlsSection: document.getElementById("textControlsSection"),
     assetLibrarySection: document.getElementById("assetLibrarySection"),
     controlPanel: document.querySelector(".control-panel"),
@@ -256,6 +326,9 @@
     line1Count: document.getElementById("line1Count"),
     line2Count: document.getElementById("line2Count"),
     subtitleCount: document.getElementById("subtitleCount"),
+    advancedLayerMode: document.getElementById("advancedLayerMode"),
+    layerModeDescription: document.getElementById("layerModeDescription"),
+    layerModeStatus: document.getElementById("layerModeStatus"),
     canvasSize: document.getElementById("canvasSize"),
     canvasRatioPicker: document.getElementById("canvasRatioPicker"),
     autoCanvasRatioButton: document.getElementById("autoCanvasRatioButton"),
@@ -274,6 +347,18 @@
     titleShadowControls: document.getElementById("titleShadowControls"),
     titleShadowColor: document.getElementById("titleShadowColor"),
     titleShadowColorValue: document.getElementById("titleShadowColorValue"),
+    shadowColorPreview: document.getElementById("shadowColorPreview"),
+    shadowColorHexInput: document.getElementById("shadowColorHexInput"),
+    shadowColorHue: document.getElementById("shadowColorHue"),
+    shadowColorHueValue: document.getElementById("shadowColorHueValue"),
+    shadowColorSaturation: document.getElementById("shadowColorSaturation"),
+    shadowColorSaturationValue: document.getElementById(
+      "shadowColorSaturationValue"
+    ),
+    shadowColorLightness: document.getElementById("shadowColorLightness"),
+    shadowColorLightnessValue: document.getElementById(
+      "shadowColorLightnessValue"
+    ),
     titleShadowOpacity: document.getElementById("titleShadowOpacity"),
     titleShadowOpacityValue: document.getElementById("titleShadowOpacityValue"),
     titleShadowOffsetY: document.getElementById("titleShadowOffsetY"),
@@ -785,13 +870,25 @@
     return Boolean(layer && layer.type === "decoration");
   }
 
+  function isLetteringGroupLayer(layer) {
+    return Boolean(layer && layer.type === "lettering-group");
+  }
+
+  function isGeneratedDecorationOwner(layer) {
+    return isDecorationLayer(layer) || isLetteringGroupLayer(layer);
+  }
+
   function isArtworkLayer(layer) {
-    return isTextLayer(layer) || isDecorationLayer(layer);
+    return (
+      isTextLayer(layer) ||
+      isDecorationLayer(layer) ||
+      isLetteringGroupLayer(layer)
+    );
   }
 
   function decorationLayerHasContent(layer) {
     return Boolean(
-      isDecorationLayer(layer) &&
+      isGeneratedDecorationOwner(layer) &&
         ((Number(layer.starCount) || 0) > 0 || layer.showJDecorations !== false)
     );
   }
@@ -802,6 +899,14 @@
 
   function getTextLayer(layerId) {
     return textLayerStore[layerId] || null;
+  }
+
+  function getDecorationLayer() {
+    return decorationLayerStore;
+  }
+
+  function getLetteringGroupLayer() {
+    return letteringGroupStore;
   }
 
   function getActiveTextLayer() {
@@ -834,6 +939,9 @@
   }
 
   function layerTypeLabel(layer) {
+    if (isLetteringGroupLayer(layer)) {
+      return "文字与星星组合图层";
+    }
     if (layer.type === "text") {
       return layer.textKey === "subtitle" ? "英文文字图层" : "中文文字图层";
     }
@@ -917,7 +1025,9 @@
       elements.artworkX.value = layer.x;
       elements.artworkY.value = layer.y;
       elements.artworkRotation.value = layer.rotation;
-      updateTextTransformInterface(isTextLayer(layer) ? layer : null);
+      updateTextTransformInterface(
+        isTextLayer(layer) || isLetteringGroupLayer(layer) ? layer : null
+      );
       syncSelectedLayerControls(layer);
       return;
     }
@@ -983,7 +1093,12 @@
       elements.selectedLayerDeleteButton,
       elements.selectedStarCount,
       elements.selectedJDecorations,
-      elements.randomizeStarsButton
+      elements.randomizeStarsButton,
+      elements.selectedGroupLineGap,
+      elements.selectedGroupSubtitleGap,
+      elements.selectedGroupStarCount,
+      elements.selectedGroupJDecorations,
+      elements.randomizeGroupStarsButton
     ].forEach(function (control) {
       if (control) {
         control.disabled = !hasLayer;
@@ -991,6 +1106,7 @@
     });
     if (!layer) {
       elements.decorationLayerControls.hidden = true;
+      elements.groupLayerControls.hidden = true;
       elements.selectedLayerName.textContent = "未选择图层";
       elements.selectedLayerType.textContent = "请从图层列表选择";
       elements.selectedLayerPreview.textContent = "—";
@@ -1000,6 +1116,7 @@
     elements.selectedLayerName.textContent = layer.name;
     elements.selectedLayerType.textContent = layerTypeLabel(layer);
     elements.decorationLayerControls.hidden = !isDecorationLayer(layer);
+    elements.groupLayerControls.hidden = !isLetteringGroupLayer(layer);
     elements.selectedLayerPreview.replaceChildren();
     if (isArtworkLayer(layer)) {
       elements.selectedLayerPreview.textContent = layer.thumbnail || "T";
@@ -1059,6 +1176,49 @@
         ""
       );
     }
+    if (isLetteringGroupLayer(layer)) {
+      state.lineGap = clamp(
+        Number.isFinite(Number(state.lineGap))
+          ? Number(state.lineGap)
+          : defaults.lineGap,
+        0,
+        220
+      );
+      state.subtitleGap = clamp(
+        Number.isFinite(Number(state.subtitleGap))
+          ? Number(state.subtitleGap)
+          : defaults.subtitleGap,
+        -150,
+        400
+      );
+      layer.starCount = clamp(
+        Number.isFinite(layer.starCount)
+          ? Math.round(layer.starCount)
+          : letteringGroupDefinition.starCount,
+        0,
+        60
+      );
+      layer.showJDecorations = layer.showJDecorations !== false;
+      elements.selectedGroupLineGap.value = state.lineGap;
+      elements.selectedGroupSubtitleGap.value = state.subtitleGap;
+      elements.selectedGroupStarCount.value = layer.starCount;
+      elements.selectedGroupJDecorations.checked = layer.showJDecorations;
+      updateRange(
+        elements.selectedGroupLineGap,
+        elements.selectedGroupLineGapValue,
+        "%"
+      );
+      updateRange(
+        elements.selectedGroupSubtitleGap,
+        elements.selectedGroupSubtitleGapValue,
+        "%"
+      );
+      updateRange(
+        elements.selectedGroupStarCount,
+        elements.selectedGroupStarCountValue,
+        ""
+      );
+    }
 
     var transformLocked = Boolean(layer.locked);
     [
@@ -1070,7 +1230,12 @@
       elements.selectedLayerResetButton,
       elements.selectedStarCount,
       elements.selectedJDecorations,
-      elements.randomizeStarsButton
+      elements.randomizeStarsButton,
+      elements.selectedGroupLineGap,
+      elements.selectedGroupSubtitleGap,
+      elements.selectedGroupStarCount,
+      elements.selectedGroupJDecorations,
+      elements.randomizeGroupStarsButton
     ].forEach(function (control) {
       control.disabled = transformLocked;
     });
@@ -1092,18 +1257,32 @@
       ? "停用文字图层"
       : isDecorationLayer(layer)
         ? "隐藏星星装饰"
+        : isLetteringGroupLayer(layer)
+          ? "隐藏字标组合"
         : "删除图层";
+  }
+
+  function updateLayerModeInterface() {
+    var advanced = Boolean(state.advancedLayerMode);
+    elements.advancedLayerMode.checked = advanced;
+    elements.layerModeStatus.textContent = advanced ? "已拆分" : "组合";
+    elements.layerModeDescription.textContent = advanced
+      ? "三行文字与星星已拆成 4 个可独立调整的图层"
+      : "当前把三行文字与星星作为一个组合图层";
+    document.body.dataset.advancedLayerMode = String(advanced);
   }
 
   function updateLayerActionState() {
     var layer = getActiveLayer();
     elements.layerCount.value = layers.length;
     elements.activeLayerSummary.textContent = layer ? layer.name : "未选择";
+    updateLayerModeInterface();
     updateTextLayerToggleInterface();
   }
 
   function updateTextTransformInterface(layer) {
-    var activeText = isTextLayer(layer) ? layer : null;
+    var activeText =
+      isTextLayer(layer) || isLetteringGroupLayer(layer) ? layer : null;
     [
       elements.artworkScale,
       elements.artworkX,
@@ -1118,7 +1297,7 @@
     if (elements.selectedTextLayerName) {
       elements.selectedTextLayerName.textContent = activeText
         ? activeText.name + " · 大小与位置"
-        : "请先选中文字图层";
+        : "请先选择文字或组合图层";
     }
   }
 
@@ -1127,21 +1306,30 @@
       return;
     }
     elements.textLayerToggleButtons.forEach(function (button) {
-      var active = Boolean(getLayer(button.dataset.textLayerToggle));
+      var simpleMode = !state.advancedLayerMode;
+      var active = simpleMode
+        ? true
+        : Boolean(getLayer(button.dataset.textLayerToggle));
       button.classList.toggle("active", active);
+      button.classList.toggle("is-mode-locked", simpleMode);
       button.setAttribute("aria-pressed", String(active));
+      button.setAttribute("aria-disabled", String(simpleMode));
       var status = button.querySelector("b");
       if (status) {
-        status.textContent = active ? "已启用" : "未启用";
+        status.textContent = simpleMode
+          ? "组合内"
+          : active
+            ? "已启用"
+            : "未启用";
       }
       var field = document.querySelector(
         '[data-text-layer-field="' + button.dataset.textLayerToggle + '"]'
       );
       if (field) {
-        field.classList.toggle("is-disabled", !active);
+        field.classList.toggle("is-disabled", !simpleMode && !active);
         var input = field.querySelector("input");
         if (input) {
-          input.disabled = !active;
+          input.disabled = !simpleMode && !active;
         }
       }
     });
@@ -1216,6 +1404,40 @@
           '><span aria-hidden="true">✦</span><span>随机星星位置</span></button>'
       );
     }
+    if (isLetteringGroupLayer(layer)) {
+      wrapper.insertAdjacentHTML(
+        "afterbegin",
+        '<p class="inline-decoration-heading"><span aria-hidden="true">T✦</span> 组合内容</p>' +
+          '<label class="wide"><span>一二行间距 <output>' +
+          state.lineGap +
+          '%</output></span><input type="range" min="0" max="220" step="5" value="' +
+          state.lineGap +
+          '" data-group-property="lineGap"' +
+          (locked ? " disabled" : "") +
+          "></label>" +
+          '<label class="wide"><span>二三行间距 <output>' +
+          state.subtitleGap +
+          '%</output></span><input type="range" min="-150" max="400" step="5" value="' +
+          state.subtitleGap +
+          '" data-group-property="subtitleGap"' +
+          (locked ? " disabled" : "") +
+          "></label>" +
+          '<label class="wide"><span>星星数量 <output>' +
+          layer.starCount +
+          '</output></span><input type="range" min="0" max="60" step="1" value="' +
+          layer.starCount +
+          '" data-decoration-property="starCount"' +
+          (locked ? " disabled" : "") +
+          "></label>" +
+          '<label class="wide inline-decoration-toggle"><span><span>显示 J 型图案</span><input type="checkbox" data-decoration-property="showJDecorations"' +
+          (layer.showJDecorations !== false ? " checked" : "") +
+          (locked ? " disabled" : "") +
+          "></span></label>" +
+          '<button type="button" data-layer-action="randomize-stars"' +
+          (locked ? " disabled" : "") +
+          '><span aria-hidden="true">✦</span><span>随机星星位置</span></button>'
+      );
+    }
     wrapper.querySelectorAll("[data-layer-property]").forEach(function (input) {
       var output = input.parentElement.querySelector("output");
       updateRange(
@@ -1229,6 +1451,9 @@
       .forEach(function (input) {
         updateRange(input, input.parentElement.querySelector("output"), "");
       });
+    wrapper.querySelectorAll("[data-group-property]").forEach(function (input) {
+      updateRange(input, input.parentElement.querySelector("output"), "%");
+    });
     return wrapper;
   }
 
@@ -1360,7 +1585,8 @@
                 : "删除图层",
             icon: "trash",
             danger: true,
-            hidden: isDecorationLayer(layer)
+            hidden:
+              isDecorationLayer(layer) || isLetteringGroupLayer(layer)
           }
         ].forEach(function (config) {
           if (config.hidden) {
@@ -1447,10 +1673,18 @@
       }
       return;
     }
+    if (isLetteringGroupLayer(layer)) {
+      setLayerVisibility(layer, false);
+      if (notifyUser) {
+        showToast("字标组合已隐藏，可在图层栏重新显示");
+      }
+      return;
+    }
     var index = layers.indexOf(layer);
     layers.splice(index, 1);
     if (isTextLayer(layer)) {
       layer.lastIndex = index;
+      layer.advancedActive = false;
     }
     var next = layers[Math.min(index, layers.length - 1)] || layers[0] || null;
     activeLayerId = next ? next.id : "";
@@ -1491,6 +1725,7 @@
       return;
     }
     layer.visible = true;
+    layer.advancedActive = true;
     var insertAt = clamp(
       Number.isFinite(layer.lastIndex) ? layer.lastIndex : layers.length,
       0,
@@ -1502,6 +1737,100 @@
     scheduleHistoryCapture();
     if (notifyUser) {
       showToast(layer.name + "已启用");
+    }
+  }
+
+  function copyGeneratedDecorationSettings(source, target) {
+    if (!source || !target) {
+      return;
+    }
+    target.starCount = clamp(
+      Math.round(Number(source.starCount) || 0),
+      0,
+      60
+    );
+    target.showJDecorations = source.showJDecorations !== false;
+    target.layoutSeed = Number.isFinite(source.layoutSeed)
+      ? source.layoutSeed >>> 0
+      : decorationLayerDefinition.layoutSeed;
+  }
+
+  function setAdvancedLayerMode(enabled, notifyUser) {
+    enabled = Boolean(enabled);
+    if (enabled === Boolean(state.advancedLayerMode)) {
+      updateLayerModeInterface();
+      return;
+    }
+
+    syncActiveLayerFromControls();
+    var group = getLetteringGroupLayer();
+    var decoration = getDecorationLayer();
+    var nextActive = null;
+
+    if (enabled) {
+      var groupIndex = layers.indexOf(group);
+      if (groupIndex < 0) {
+        groupIndex = clamp(group.lastIndex || 0, 0, layers.length);
+      }
+      group.lastIndex = groupIndex;
+      copyGeneratedDecorationSettings(group, decoration);
+      layers = layers.filter(function (layer) {
+        return !isLetteringGroupLayer(layer);
+      });
+      var advancedLayers = [
+        decoration,
+        textLayerStore["text-subtitle"],
+        textLayerStore["text-line-2"],
+        textLayerStore["text-line-1"]
+      ].filter(function (layer) {
+        return !isTextLayer(layer) || layer.advancedActive !== false;
+      });
+      layers.splice.apply(layers, [groupIndex, 0].concat(advancedLayers));
+      nextActive =
+        getLayer("text-line-1") ||
+        getLayer("text-line-2") ||
+        getLayer("text-subtitle") ||
+        decoration;
+    } else {
+      textLayerDefinitions.forEach(function (definition) {
+        var textLayer = getTextLayer(definition.id);
+        textLayer.advancedActive = Boolean(getLayer(definition.id));
+      });
+      copyGeneratedDecorationSettings(decoration, group);
+      var coreIndices = layers
+        .map(function (layer, index) {
+          return isTextLayer(layer) || isDecorationLayer(layer) ? index : -1;
+        })
+        .filter(function (index) {
+          return index >= 0;
+        });
+      var insertAt = coreIndices.length
+        ? Math.min.apply(null, coreIndices)
+        : clamp(group.lastIndex || 0, 0, layers.length);
+      layers = layers.filter(function (layer) {
+        return !isTextLayer(layer) && !isDecorationLayer(layer);
+      });
+      group.lastIndex = clamp(insertAt, 0, layers.length);
+      layers.splice(group.lastIndex, 0, group);
+      nextActive = group;
+    }
+
+    state.advancedLayerMode = enabled;
+    activeLayerId = nextActive ? nextActive.id : "";
+    expandedLayerId = activeLayerId;
+    syncLayerControls(nextActive);
+    canvasSelectionVisible = Boolean(nextActive && !nextActive.locked);
+    renderLayerList();
+    updateOverlayInterface();
+    updateDragTargetInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast(
+        enabled
+          ? "已拆分为 3 个文字图层和 1 个星星图层"
+          : "已合并为一个字标组合图层"
+      );
     }
   }
 
@@ -1732,7 +2061,7 @@
   }
 
   function setDecorationLayerProperty(layer, property, value, output) {
-    if (!isDecorationLayer(layer) || layer.locked) {
+    if (!isGeneratedDecorationOwner(layer) || layer.locked) {
       return;
     }
     if (property === "starCount") {
@@ -1748,6 +2077,27 @@
     if (layer.id === activeLayerId) {
       syncSelectedLayerControls(layer);
     }
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function setGroupLayerProperty(layer, property, value, output) {
+    if (!isLetteringGroupLayer(layer) || layer.locked) {
+      return;
+    }
+    var ranges = {
+      lineGap: [0, 220],
+      subtitleGap: [-150, 400]
+    };
+    if (!ranges[property]) {
+      return;
+    }
+    var next = clamp(Number(value), ranges[property][0], ranges[property][1]);
+    state[property] = next;
+    if (output) {
+      output.textContent = next + "%";
+    }
+    syncSelectedLayerControls(layer);
     scheduleRender();
     scheduleHistoryCapture();
   }
@@ -1769,7 +2119,7 @@
   }
 
   function randomizeStarPositions(layer, notifyUser) {
-    if (!isDecorationLayer(layer) || layer.locked) {
+    if (!isGeneratedDecorationOwner(layer) || layer.locked) {
       return;
     }
     layer.layoutSeed = nextDecorationSeed(layer.layoutSeed || 0);
@@ -2336,6 +2686,53 @@
     };
   }
 
+  function letteringGroupScale(layer, width, height) {
+    return (
+      textBaseScale(width, height) *
+      clamp(layer.scale / 100, 0.2, 2.2)
+    );
+  }
+
+  function applyLetteringGroupTransform(ctx, width, height, layer) {
+    var scale = letteringGroupScale(layer, width, height);
+    ctx.translate(width * (layer.x / 100), height * (layer.y / 100));
+    ctx.rotate((layer.rotation * Math.PI) / 180);
+    ctx.scale(scale, scale);
+    ctx.translate(-width / 2, -height / 2);
+  }
+
+  function letteringGroupGeometry(layer, bounds, width, height) {
+    if (!layer || !bounds) {
+      return null;
+    }
+    var scale = letteringGroupScale(layer, width, height);
+    var boundsCenterX = (bounds.left + bounds.right) / 2;
+    var boundsCenterY = (bounds.top + bounds.bottom) / 2;
+    var offsetX = (boundsCenterX - width / 2) * scale;
+    var offsetY = (boundsCenterY - height / 2) * scale;
+    var radians = (layer.rotation * Math.PI) / 180;
+    return {
+      centerX:
+        width * (layer.x / 100) +
+        offsetX * Math.cos(radians) -
+        offsetY * Math.sin(radians),
+      centerY:
+        height * (layer.y / 100) +
+        offsetX * Math.sin(radians) +
+        offsetY * Math.cos(radians),
+      width: (bounds.right - bounds.left) * scale,
+      height: (bounds.bottom - bounds.top) * scale,
+      angle: layer.rotation,
+      label:
+        layer.name +
+        " · " +
+        Math.round(layer.scale) +
+        "% · " +
+        Math.round(layer.rotation) +
+        "°"
+    };
+  }
+
   function decorationLayerGeometry(layer, width, height) {
     if (!layer) {
       return null;
@@ -2370,6 +2767,17 @@
     var height = result.height;
 
     var layer = getLayer(target);
+    if (isLetteringGroupLayer(layer)) {
+      if (layer.locked || !layer.visible) {
+        return null;
+      }
+      return letteringGroupGeometry(
+        layer,
+        result.groupBounds || result.artworkBounds,
+        width,
+        height
+      );
+    }
     if (isDecorationLayer(layer)) {
       if (layer.locked || !layer.visible) {
         return null;
@@ -2848,8 +3256,7 @@
     return {
       primaryColor: "主色",
       accentColor: "点缀色",
-      skyColor: "辅色",
-      titleShadowColor: "标题阴影"
+      skyColor: "辅色"
     }[target] || "颜色";
   }
 
@@ -2884,7 +3291,50 @@
     }
   }
 
+  function updateShadowColorInterface() {
+    if (!elements.titleShadowColor || !elements.shadowColorHexInput) {
+      return;
+    }
+    var color =
+      normalizeHexColor(elements.titleShadowColor.value) || "#000000";
+    var hsl = rgbToHsl(hexToRgb(color));
+    elements.titleShadowColorValue.textContent = color.toUpperCase();
+    elements.shadowColorPreview.style.backgroundColor = color;
+    elements.shadowColorHexInput.value = color.toUpperCase();
+    elements.shadowColorHue.value = hsl.h;
+    elements.shadowColorSaturation.value = hsl.s;
+    elements.shadowColorLightness.value = hsl.l;
+    updateRange(elements.shadowColorHue, elements.shadowColorHueValue, "°");
+    updateRange(
+      elements.shadowColorSaturation,
+      elements.shadowColorSaturationValue,
+      "%"
+    );
+    updateRange(
+      elements.shadowColorLightness,
+      elements.shadowColorLightnessValue,
+      "%"
+    );
+    elements.shadowColorSaturation.style.background =
+      "linear-gradient(90deg, hsl(" +
+      hsl.h +
+      ", 0%, " +
+      hsl.l +
+      "%), hsl(" +
+      hsl.h +
+      ", 100%, " +
+      hsl.l +
+      "%))";
+    elements.shadowColorLightness.style.background =
+      "linear-gradient(90deg, #000, hsl(" +
+      hsl.h +
+      ", " +
+      hsl.s +
+      "%, 50%), #fff)";
+  }
+
   function updateColorInterface() {
+    updateShadowColorInterface();
     if (!elements.colorTargetButtons || !elements.colorHexInput) {
       return;
     }
@@ -2960,6 +3410,17 @@
       })
     );
     setColorValue(activeColorTarget, color);
+  }
+
+  function updateShadowColorFromHslControls() {
+    var color = rgbToHex(
+      hslToRgb({
+        h: Number(elements.shadowColorHue.value),
+        s: Number(elements.shadowColorSaturation.value),
+        l: Number(elements.shadowColorLightness.value)
+      })
+    );
+    setColorValue("titleShadowColor", color);
   }
 
   function isHan(character) {
@@ -3831,6 +4292,197 @@
     };
   }
 
+  function movePreparedTextLayout(layout, nextY) {
+    if (!layout) {
+      return;
+    }
+    var delta = nextY - layout.y;
+    layout.y += delta;
+    layout.top += delta;
+    layout.bottom += delta;
+  }
+
+  function arrangeGroupedTextLayouts(textLayouts, width, height) {
+    var line1Entry = textLayouts["text-line-1"] || null;
+    var line2Entry = textLayouts["text-line-2"] || null;
+    var subtitleEntry = textLayouts["text-subtitle"] || null;
+    var titleEntries = [line1Entry, line2Entry].filter(Boolean);
+    var referenceRatio = width / height >= 1.98;
+
+    if (line1Entry && line2Entry) {
+      var firstLineY =
+        height *
+        (subtitleEntry
+          ? referenceRatio
+            ? 0.36
+            : 0.33
+          : referenceRatio
+            ? 0.42
+            : 0.38);
+      var secondLineY =
+        height *
+        (subtitleEntry
+          ? referenceRatio
+            ? 0.69
+            : 0.63
+          : referenceRatio
+            ? 0.73
+            : 0.67);
+      var lineMidpoint = (firstLineY + secondLineY) / 2;
+      var responsiveLineGap = Math.min(
+        secondLineY - firstLineY,
+        width * 0.18
+      );
+      var scaledHalfGap =
+        (responsiveLineGap / 2) *
+        clamp(state.lineGap / 100, 0, 2.2);
+      movePreparedTextLayout(
+        line1Entry.layout,
+        lineMidpoint - scaledHalfGap
+      );
+      movePreparedTextLayout(
+        line2Entry.layout,
+        lineMidpoint + scaledHalfGap
+      );
+    } else if (titleEntries.length) {
+      movePreparedTextLayout(
+        titleEntries[0].layout,
+        height * (subtitleEntry ? 0.5 : 0.55)
+      );
+    }
+
+    if (subtitleEntry) {
+      if (titleEntries.length) {
+        var titleBottom = titleEntries.reduce(function (lowest, entry) {
+          return Math.max(lowest, entry.layout.bottom);
+        }, 0);
+        var subtitleGapUnit = Math.min(width, height);
+        var subtitleGapScale = clamp(state.subtitleGap / 100, -1.5, 4);
+        var minimumSubtitleGap = -subtitleGapUnit * 0.03;
+        var subtitleGapStep = subtitleGapUnit * 0.04;
+        var effectiveSubtitleGap =
+          minimumSubtitleGap + subtitleGapStep * subtitleGapScale;
+        var defaultSubtitleGap = minimumSubtitleGap + subtitleGapStep;
+        var titleShift = -(effectiveSubtitleGap - defaultSubtitleGap) / 2;
+        titleEntries.forEach(function (entry) {
+          movePreparedTextLayout(
+            entry.layout,
+            entry.layout.y + titleShift
+          );
+        });
+        movePreparedTextLayout(
+          subtitleEntry.layout,
+          titleBottom + titleShift + effectiveSubtitleGap +
+            subtitleEntry.layout.fontSize * 1.05
+        );
+      } else {
+        movePreparedTextLayout(subtitleEntry.layout, height * 0.56);
+      }
+    }
+
+    Object.keys(textLayouts).forEach(function (layerId) {
+      var entry = textLayouts[layerId];
+      entry.bounds = textLayoutBounds(
+        entry.layout,
+        entry.kind,
+        width,
+        height
+      );
+    });
+
+    var titleLayouts = titleEntries.map(function (entry) {
+      return entry.layout;
+    });
+    var subtitleLayout = subtitleEntry ? subtitleEntry.layout : null;
+    var groupBounds = measureArtworkBounds(
+      titleLayouts,
+      subtitleLayout,
+      width,
+      height
+    );
+    var exclusionRects = Object.keys(textLayouts).map(function (layerId) {
+      var entry = textLayouts[layerId];
+      return globalRect(
+        entry.layout,
+        width / 2,
+        Math.min(width, height) * (entry.kind === "subtitle" ? 0.01 : 0.014)
+      );
+    });
+
+    return {
+      titleLayouts: titleLayouts,
+      subtitle: subtitleLayout,
+      bounds: groupBounds,
+      exclusionRects: exclusionRects
+    };
+  }
+
+  function drawGroupedTextEntry(ctx, width, entry, pixelScale) {
+    if (!entry) {
+      return;
+    }
+    if (entry.kind === "subtitle") {
+      drawSubtitle(ctx, entry.layout, width / 2);
+      drawSubtitleFlourish(
+        ctx,
+        entry.layout,
+        width / 2,
+        width,
+        entry.seed
+      );
+      return;
+    }
+    if (state.titleShadowEnabled && state.titleShadowOpacity > 0) {
+      drawGlyphLine(ctx, entry.layout, width / 2, {
+        shadowPass: true,
+        pixelScale: pixelScale
+      });
+    }
+    drawGlyphLine(ctx, entry.layout, width / 2);
+    drawAttachedGlyphGrammar(
+      ctx,
+      entry.layout,
+      width / 2,
+      entry.layout.lineIndex
+    );
+  }
+
+  function drawLetteringGroupLayer(
+    ctx,
+    width,
+    height,
+    layer,
+    textLayouts,
+    groupLayout,
+    pixelScale
+  ) {
+    if (!layer || !groupLayout) {
+      return;
+    }
+    ctx.save();
+    ctx.globalAlpha = clamp(
+      (Number.isFinite(layer.opacity) ? layer.opacity : 100) / 100,
+      0,
+      1
+    );
+    applyLetteringGroupTransform(ctx, width, height, layer);
+    drawRandomizedStars(
+      ctx,
+      width,
+      height,
+      groupLayout.exclusionRects,
+      layer.layoutSeed,
+      layer.starCount
+    );
+    if (layer.showJDecorations !== false) {
+      drawJPatternDecorations(ctx, width, height, layer.layoutSeed);
+    }
+    ["text-subtitle", "text-line-2", "text-line-1"].forEach(function (layerId) {
+      drawGroupedTextEntry(ctx, width, textLayouts[layerId], pixelScale);
+    });
+    ctx.restore();
+  }
+
   function drawIndependentTextLayer(
     ctx,
     width,
@@ -4030,15 +4682,38 @@
       };
     }
 
-    var visibleTextLayers = layers.filter(function (layer) {
-      return isTextLayer(layer) && layer.visible && textLayouts[layer.id];
-    });
-    var exclusionRects = visibleTextLayers.map(function (layer) {
-      return geometryAxisAlignedRect(
-        textLayerGeometry(layer, textLayouts[layer.id], width, height),
-        Math.min(width, height) * 0.012
-      );
-    });
+    var groupLayer = getLayer("lettering-group");
+    var groupedMode = Boolean(
+      isLetteringGroupLayer(groupLayer) && !state.advancedLayerMode
+    );
+    var groupLayout = groupedMode
+      ? arrangeGroupedTextLayouts(textLayouts, width, height)
+      : null;
+    if (
+      groupLayout &&
+      !groupLayout.bounds &&
+      decorationLayerHasContent(groupLayer)
+    ) {
+      groupLayout.bounds = {
+        left: width * 0.08,
+        right: width * 0.92,
+        top: height * 0.08,
+        bottom: height * 0.86
+      };
+    }
+    var visibleTextLayers = groupedMode
+      ? []
+      : layers.filter(function (layer) {
+          return isTextLayer(layer) && layer.visible && textLayouts[layer.id];
+        });
+    var exclusionRects = groupedMode
+      ? groupLayout.exclusionRects
+      : visibleTextLayers.map(function (layer) {
+          return geometryAxisAlignedRect(
+            textLayerGeometry(layer, textLayouts[layer.id], width, height),
+            Math.min(width, height) * 0.012
+          );
+        });
     function drawCompositionLayer(layer) {
       if (!layer.visible) {
         return;
@@ -4050,6 +4725,16 @@
           height,
           imageForLayer(layer, renderTime, forcedLayerImages),
           layer
+        );
+      } else if (isLetteringGroupLayer(layer)) {
+        drawLetteringGroupLayer(
+          ctx,
+          width,
+          height,
+          layer,
+          textLayouts,
+          groupLayout,
+          pixelScale
         );
       } else if (isTextLayer(layer)) {
         drawIndependentTextLayer(
@@ -4073,48 +4758,62 @@
 
     layers.forEach(drawCompositionLayer);
 
-    var activeTitleLayouts = visibleTextLayers
-      .filter(function (layer) {
-        return layer.textKey !== "subtitle";
-      })
-      .map(function (layer) {
-        return textLayouts[layer.id].layout;
-      });
+    var groupVisible = Boolean(groupedMode && groupLayer.visible);
+    var activeTitleLayouts = groupedMode
+      ? groupVisible
+        ? groupLayout.titleLayouts
+        : []
+      : visibleTextLayers
+          .filter(function (layer) {
+            return layer.textKey !== "subtitle";
+          })
+          .map(function (layer) {
+            return textLayouts[layer.id].layout;
+          });
     var activeSubtitleLayer = getLayer("text-subtitle");
-    var activeSubtitle =
-      activeSubtitleLayer &&
-      activeSubtitleLayer.visible &&
-      textLayouts[activeSubtitleLayer.id]
+    var activeSubtitle = groupedMode
+      ? groupVisible
+        ? groupLayout.subtitle
+        : null
+      : activeSubtitleLayer &&
+          activeSubtitleLayer.visible &&
+          textLayouts[activeSubtitleLayer.id]
         ? textLayouts[activeSubtitleLayer.id].layout
         : null;
-    var artworkBounds = exclusionRects.length
-      ? {
-          left: Math.min.apply(
-            null,
-            exclusionRects.map(function (rect) {
-              return rect.left;
-            })
-          ),
-          right: Math.max.apply(
-            null,
-            exclusionRects.map(function (rect) {
-              return rect.right;
-            })
-          ),
-          top: Math.min.apply(
-            null,
-            exclusionRects.map(function (rect) {
-              return rect.top;
-            })
-          ),
-          bottom: Math.max.apply(
-            null,
-            exclusionRects.map(function (rect) {
-              return rect.bottom;
-            })
-          )
-        }
-      : null;
+    var artworkBounds = groupedMode
+      ? groupLayout.bounds
+      : exclusionRects.length
+        ? {
+            left: Math.min.apply(
+              null,
+              exclusionRects.map(function (rect) {
+                return rect.left;
+              })
+            ),
+            right: Math.max.apply(
+              null,
+              exclusionRects.map(function (rect) {
+                return rect.right;
+              })
+            ),
+            top: Math.min.apply(
+              null,
+              exclusionRects.map(function (rect) {
+                return rect.top;
+              })
+            ),
+            bottom: Math.max.apply(
+              null,
+              exclusionRects.map(function (rect) {
+                return rect.bottom;
+              })
+            )
+          }
+        : null;
+    var groupHasContent = Boolean(
+      groupVisible &&
+        (Object.keys(textLayouts).length || decorationLayerHasContent(groupLayer))
+    );
 
     return {
       width: width,
@@ -4123,7 +4822,9 @@
       subtitle: activeSubtitle,
       textLayouts: textLayouts,
       artworkBounds: artworkBounds,
+      groupBounds: groupedMode ? groupLayout.bounds : null,
       isEmpty:
+        !groupHasContent &&
         !visibleTextLayers.length &&
         !layers.some(function (layer) {
           return decorationLayerHasContent(layer) && layer.visible;
@@ -4138,6 +4839,9 @@
     state.line1 = elements.line1.value;
     state.line2 = elements.line2.value;
     state.subtitle = elements.subtitle.value;
+    state.advancedLayerMode = elements.advancedLayerMode.checked;
+    state.lineGap = Number(elements.selectedGroupLineGap.value);
+    state.subtitleGap = Number(elements.selectedGroupSubtitleGap.value);
     state.canvasSize = elements.canvasSize.value;
     state.artworkScale = Number(elements.artworkScale.value);
     state.artworkX = Number(elements.artworkX.value);
@@ -4215,6 +4919,17 @@
     elements.line1Count.value = graphemeCount(state.line1);
     elements.line2Count.value = graphemeCount(state.line2);
     elements.subtitleCount.value = graphemeCount(state.subtitle);
+    updateLayerModeInterface();
+    updateRange(
+      elements.selectedGroupLineGap,
+      elements.selectedGroupLineGapValue,
+      "%"
+    );
+    updateRange(
+      elements.selectedGroupSubtitleGap,
+      elements.selectedGroupSubtitleGapValue,
+      "%"
+    );
     updateRange(elements.artworkScale, elements.artworkScaleValue);
     updateRange(elements.artworkX, elements.artworkXValue);
     updateRange(elements.artworkY, elements.artworkYValue);
@@ -4362,6 +5077,8 @@
     return {
       state: Object.assign({}, state),
       textLayers: textLayers,
+      decorationLayer: cloneLayerForHistory(decorationLayerStore),
+      letteringGroup: cloneLayerForHistory(letteringGroupStore),
       layers: layers.map(cloneLayerForHistory),
       activeLayerId: activeLayerId,
       expandedLayerId: expandedLayerId,
@@ -4383,6 +5100,7 @@
       visible: layer.visible,
       locked: layer.locked,
       lastIndex: layer.lastIndex,
+      advancedActive: layer.advancedActive,
       defaultX: layer.defaultX,
       defaultY: layer.defaultY,
       defaultScale: layer.defaultScale,
@@ -4408,6 +5126,8 @@
     return JSON.stringify({
       state: snapshot.state,
       textLayers: textFingerprint,
+      decorationLayer: historyLayerFingerprint(snapshot.decorationLayer),
+      letteringGroup: historyLayerFingerprint(snapshot.letteringGroup),
       layers: snapshot.layers.map(historyLayerFingerprint),
       activeLayerId: snapshot.activeLayerId,
       expandedLayerId: snapshot.expandedLayerId,
@@ -4419,14 +5139,30 @@
     if (!elements.undoButton || !elements.redoButton) {
       return;
     }
-    elements.undoButton.disabled = undoStack.length === 0;
-    elements.redoButton.disabled = redoStack.length === 0;
-    elements.undoButton.title = undoStack.length
-      ? "撤回上一步（Ctrl/Cmd + Z）"
-      : "没有可撤回的操作";
-    elements.redoButton.title = redoStack.length
-      ? "重做下一步（Ctrl/Cmd + Shift + Z）"
-      : "没有可重做的操作";
+    [elements.undoButton, elements.mobileUndoButton].forEach(function (button) {
+      if (!button) {
+        return;
+      }
+      button.disabled = undoStack.length === 0;
+      button.title = undoStack.length
+        ? "撤回上一步（Ctrl/Cmd + Z）"
+        : "没有可撤回的操作";
+    });
+    [elements.redoButton, elements.mobileRedoButton].forEach(function (button) {
+      if (!button) {
+        return;
+      }
+      button.disabled = redoStack.length === 0;
+      button.title = redoStack.length
+        ? "重做下一步（Ctrl/Cmd + Shift + Z）"
+        : "没有可重做的操作";
+    });
+    if (elements.mobileHistoryToolbar) {
+      elements.mobileHistoryToolbar.classList.toggle(
+        "is-empty",
+        undoStack.length === 0 && redoStack.length === 0
+      );
+    }
   }
 
   function flushHistoryCapture() {
@@ -4458,17 +5194,40 @@
 
   function restoreHistorySnapshot(snapshot) {
     historySuspended = true;
-    state = Object.assign({}, snapshot.state);
+    state = Object.assign({}, defaults, snapshot.state);
     textLayerStore = Object.create(null);
     Object.keys(snapshot.textLayers).forEach(function (layerId) {
       textLayerStore[layerId] = cloneLayerForHistory(
         snapshot.textLayers[layerId]
       );
     });
+    var storedDecoration =
+      snapshot.decorationLayer ||
+      snapshot.layers.find(function (layer) {
+        return isDecorationLayer(layer);
+      });
+    var storedGroup =
+      snapshot.letteringGroup ||
+      snapshot.layers.find(function (layer) {
+        return isLetteringGroupLayer(layer);
+      });
+    decorationLayerStore = storedDecoration
+      ? cloneLayerForHistory(storedDecoration)
+      : createDefaultDecorationLayer();
+    letteringGroupStore = storedGroup
+      ? cloneLayerForHistory(storedGroup)
+      : createDefaultLetteringGroupLayer();
     layers = snapshot.layers.map(function (layer) {
-      return isTextLayer(layer)
-        ? textLayerStore[layer.id]
-        : cloneLayerForHistory(layer);
+      if (isTextLayer(layer)) {
+        return textLayerStore[layer.id];
+      }
+      if (isDecorationLayer(layer)) {
+        return decorationLayerStore;
+      }
+      if (isLetteringGroupLayer(layer)) {
+        return letteringGroupStore;
+      }
+      return cloneLayerForHistory(layer);
     });
     activeLayerId = getLayer(snapshot.activeLayerId)
       ? snapshot.activeLayerId
@@ -4530,6 +5289,9 @@
     elements.line1.value = state.line1;
     elements.line2.value = state.line2;
     elements.subtitle.value = state.subtitle;
+    elements.advancedLayerMode.checked = Boolean(state.advancedLayerMode);
+    elements.selectedGroupLineGap.value = state.lineGap;
+    elements.selectedGroupSubtitleGap.value = state.subtitleGap;
     elements.canvasSize.value = state.canvasSize;
     elements.artworkScale.value = state.artworkScale;
     elements.artworkX.value = state.artworkX;
@@ -5418,6 +6180,40 @@
   elements.randomizeStarsButton.addEventListener("click", function () {
     randomizeStarPositions(getActiveLayer(), true);
   });
+  elements.selectedGroupLineGap.addEventListener("input", function () {
+    setGroupLayerProperty(
+      getActiveLayer(),
+      "lineGap",
+      elements.selectedGroupLineGap.value,
+      elements.selectedGroupLineGapValue
+    );
+  });
+  elements.selectedGroupSubtitleGap.addEventListener("input", function () {
+    setGroupLayerProperty(
+      getActiveLayer(),
+      "subtitleGap",
+      elements.selectedGroupSubtitleGap.value,
+      elements.selectedGroupSubtitleGapValue
+    );
+  });
+  elements.selectedGroupStarCount.addEventListener("input", function () {
+    setDecorationLayerProperty(
+      getActiveLayer(),
+      "starCount",
+      elements.selectedGroupStarCount.value,
+      elements.selectedGroupStarCountValue
+    );
+  });
+  elements.selectedGroupJDecorations.addEventListener("input", function () {
+    setDecorationLayerProperty(
+      getActiveLayer(),
+      "showJDecorations",
+      elements.selectedGroupJDecorations.checked
+    );
+  });
+  elements.randomizeGroupStarsButton.addEventListener("click", function () {
+    randomizeStarPositions(getActiveLayer(), true);
+  });
 
   elements.editorSectionTabs.forEach(function (button) {
     button.addEventListener("click", function () {
@@ -5479,8 +6275,9 @@
     var decorationControl = event.target.closest(
       "[data-decoration-property]"
     );
+    var groupControl = event.target.closest("[data-group-property]");
     var item = event.target.closest(".layer-item");
-    if ((!control && !decorationControl) || !item) {
+    if ((!control && !decorationControl && !groupControl) || !item) {
       return;
     }
     var layer = getLayer(item.dataset.layerId);
@@ -5491,6 +6288,15 @@
         control.dataset.layerProperty,
         control.value,
         output
+      );
+      return;
+    }
+    if (groupControl) {
+      setGroupLayerProperty(
+        layer,
+        groupControl.dataset.groupProperty,
+        groupControl.value,
+        groupControl.parentElement.querySelector("output")
       );
       return;
     }
@@ -5652,6 +6458,9 @@
 
   elements.textLayerToggleButtons.forEach(function (button) {
     button.addEventListener("click", function () {
+      if (!state.advancedLayerMode) {
+        return;
+      }
       var layerId = button.dataset.textLayerToggle;
       var enabled = !getLayer(layerId);
       setTextLayerActive(layerId, enabled, true);
@@ -5676,14 +6485,22 @@
     { input: elements.subtitle, layerId: "text-subtitle" }
   ].forEach(function (item) {
     item.input.addEventListener("focus", function () {
-      if (getLayer(item.layerId)) {
-        selectLayer(item.layerId, {
+      var targetLayer = state.advancedLayerMode
+        ? getLayer(item.layerId)
+        : getLayer("lettering-group");
+      if (targetLayer) {
+        selectLayer(targetLayer.id, {
           showSelection: true,
           render: false,
           syncEditorSection: false
         });
       }
     });
+  });
+
+  elements.advancedLayerMode.addEventListener("change", function () {
+    setAdvancedLayerMode(elements.advancedLayerMode.checked, true);
+    setEditorSection("text", { resetScroll: false });
   });
 
   elements.colorTargetButtons.forEach(function (button) {
@@ -5723,6 +6540,15 @@
     }
   );
 
+  [
+    elements.shadowColorHue,
+    elements.shadowColorSaturation,
+    elements.shadowColorLightness
+  ].forEach(function (control) {
+    control.addEventListener("input", updateShadowColorFromHslControls);
+    control.addEventListener("change", updateShadowColorFromHslControls);
+  });
+
   elements.colorHexInput.addEventListener("input", function () {
     var clean = String(elements.colorHexInput.value).trim();
     if (/^#?[0-9a-f]{6}$/i.test(clean)) {
@@ -5732,6 +6558,24 @@
   elements.colorHexInput.addEventListener("change", function () {
     if (!setColorValue(activeColorTarget, elements.colorHexInput.value)) {
       updateColorInterface();
+      showToast("请输入 3 位或 6 位 HEX 颜色");
+    }
+  });
+
+  elements.shadowColorHexInput.addEventListener("input", function () {
+    var clean = String(elements.shadowColorHexInput.value).trim();
+    if (/^#?[0-9a-f]{6}$/i.test(clean)) {
+      setColorValue("titleShadowColor", clean);
+    }
+  });
+  elements.shadowColorHexInput.addEventListener("change", function () {
+    if (
+      !setColorValue(
+        "titleShadowColor",
+        elements.shadowColorHexInput.value
+      )
+    ) {
+      updateShadowColorInterface();
       showToast("请输入 3 位或 6 位 HEX 颜色");
     }
   });
@@ -5814,7 +6658,7 @@
   elements.resetButton.addEventListener("click", function () {
     state = Object.assign({}, defaults);
     layers = createDefaultTextLayers();
-    activeLayerId = "text-line-1";
+    activeLayerId = "lettering-group";
     expandedLayerId = activeLayerId;
     stopGifPreviewLoop();
     applyStateToControls();
@@ -5942,6 +6786,8 @@
   elements.cacheRefreshButton.addEventListener("click", refreshSiteCache);
   elements.undoButton.addEventListener("click", undoHistory);
   elements.redoButton.addEventListener("click", redoHistory);
+  elements.mobileUndoButton.addEventListener("click", undoHistory);
+  elements.mobileRedoButton.addEventListener("click", redoHistory);
   elements.aboutButton.addEventListener("click", openAboutDialog);
   elements.aboutBackdrop.addEventListener("click", closeAboutDialog);
   elements.aboutCloseButton.addEventListener("click", closeAboutDialog);

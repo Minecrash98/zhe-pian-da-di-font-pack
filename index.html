@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=24" />
+    <link rel="stylesheet" href="./styles.css?v=25" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -266,6 +266,39 @@
               </div>
             </div>
 
+            <div class="group-layer-controls" id="groupLayerControls" hidden>
+              <div class="decoration-layer-controls-heading">
+                <span aria-hidden="true">T✦</span>
+                <span>
+                  <strong>组合内容</strong>
+                  <small>整体变换字标，并调整文字与装饰之间的关系</small>
+                </span>
+              </div>
+              <label class="range-field selected-layer-range">
+                <span><span>一二行间距</span><output id="selectedGroupLineGapValue">110%</output></span>
+                <input id="selectedGroupLineGap" type="range" min="0" max="220" step="5" value="110" />
+              </label>
+              <label class="range-field selected-layer-range">
+                <span><span>二三行间距</span><output id="selectedGroupSubtitleGapValue">100%</output></span>
+                <input id="selectedGroupSubtitleGap" type="range" min="-150" max="400" step="5" value="100" />
+              </label>
+              <label class="range-field selected-layer-range">
+                <span><span>星星数量</span><output id="selectedGroupStarCountValue">30</output></span>
+                <input id="selectedGroupStarCount" type="range" min="0" max="60" step="1" value="30" />
+              </label>
+              <div class="decoration-layer-content-actions">
+                <label class="switch-label">
+                  <input id="selectedGroupJDecorations" type="checkbox" checked />
+                  <span class="switch" aria-hidden="true"></span>
+                  <span>显示 J 型图案</span>
+                </label>
+                <button class="randomize-stars-button" id="randomizeGroupStarsButton" type="button">
+                  <span aria-hidden="true">✦</span>
+                  随机星星位置
+                </button>
+              </div>
+            </div>
+
             <label class="range-field selected-layer-range">
               <span><span>大小</span><output id="selectedLayerScaleValue">100%</output></span>
               <input id="selectedLayerScale" type="range" min="5" max="240" step="1" value="100" />
@@ -309,6 +342,18 @@
               <button class="icon-button" id="resetButton" type="button" title="恢复默认设置" aria-label="恢复默认设置">
                 ↺
               </button>
+            </div>
+
+            <div class="advanced-layer-mode-card">
+              <span class="advanced-layer-mode-copy">
+                <strong>高级图层编辑</strong>
+                <small id="layerModeDescription">当前把三行文字与星星作为一个组合图层</small>
+              </span>
+              <label class="switch-label advanced-layer-mode-switch">
+                <input id="advancedLayerMode" type="checkbox" />
+                <span class="switch" aria-hidden="true"></span>
+                <span id="layerModeStatus">组合</span>
+              </label>
             </div>
 
             <div class="field text-layer-field" data-text-layer-field="text-line-1">
@@ -475,7 +520,6 @@
               <input id="primaryColor" type="hidden" value="#0962b5" />
               <input id="accentColor" type="hidden" value="#fcc641" />
               <input id="skyColor" type="hidden" value="#44a5db" />
-              <input id="titleShadowColor" type="hidden" value="#4b3020" />
               <button
                 class="color-target-button active"
                 type="button"
@@ -507,17 +551,6 @@
               >
                 <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
                 <span><strong>辅色</strong><small id="skyColorValue">#44A5DB</small></span>
-              </button>
-              <button
-                class="color-target-button"
-                type="button"
-                role="tab"
-                aria-selected="false"
-                data-color-target="titleShadowColor"
-                tabindex="-1"
-              >
-                <i class="color-target-swatch" data-color-swatch aria-hidden="true"></i>
-                <span><strong>阴影</strong><small id="titleShadowColorValue">#4B3020</small></span>
               </button>
             </div>
 
@@ -608,6 +641,44 @@
                 </div>
 
                 <fieldset class="shadow-controls" id="titleShadowControls">
+                  <input id="titleShadowColor" type="hidden" value="#4b3020" />
+                  <div class="inline-color-editor shadow-inline-color-editor">
+                    <div class="color-editor-topline">
+                      <span>
+                        <small>阴影颜色</small>
+                        <strong id="titleShadowColorValue">#4B3020</strong>
+                      </span>
+                      <i class="color-editor-preview" id="shadowColorPreview" aria-hidden="true"></i>
+                    </div>
+
+                    <label class="color-hex-field">
+                      <span>HEX</span>
+                      <input
+                        id="shadowColorHexInput"
+                        type="text"
+                        value="#4B3020"
+                        maxlength="7"
+                        inputmode="text"
+                        autocomplete="off"
+                        spellcheck="false"
+                        aria-label="标题阴影十六进制颜色"
+                      />
+                    </label>
+
+                    <label class="color-editor-range hue-range">
+                      <span><span>色相 H</span><output id="shadowColorHueValue">24°</output></span>
+                      <input id="shadowColorHue" type="range" min="0" max="360" step="1" value="24" />
+                    </label>
+                    <label class="color-editor-range saturation-range">
+                      <span><span>饱和度 S</span><output id="shadowColorSaturationValue">40%</output></span>
+                      <input id="shadowColorSaturation" type="range" min="0" max="100" step="1" value="40" />
+                    </label>
+                    <label class="color-editor-range lightness-range">
+                      <span><span>明度 L</span><output id="shadowColorLightnessValue">21%</output></span>
+                      <input id="shadowColorLightness" type="range" min="0" max="100" step="1" value="21" />
+                    </label>
+                  </div>
+
                   <label class="range-field compact-range">
                     <span>
                       <span>不透明度</span>
@@ -843,6 +914,21 @@
             </div>
           </div>
 
+          <div class="mobile-history-toolbar is-empty" id="mobileHistoryToolbar" aria-label="编辑历史">
+            <button id="mobileUndoButton" type="button" disabled aria-label="撤回" title="没有可撤回的操作">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m9 7-5 5 5 5"></path>
+                <path d="M5 12h8.5a5.5 5.5 0 0 1 5.5 5.5"></path>
+              </svg>
+            </button>
+            <button id="mobileRedoButton" type="button" disabled aria-label="重做" title="没有可重做的操作">
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m15 7 5 5-5 5"></path>
+                <path d="M19 12h-8.5A5.5 5.5 0 0 0 5 17.5"></path>
+              </svg>
+            </button>
+          </div>
+
           <div class="canvas-stage" id="canvasStage">
             <div class="canvas-frame checker" id="canvasFrame">
               <canvas
@@ -966,7 +1052,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=5"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=30"></script>
+    <script src="./app.js?v=31"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

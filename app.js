@@ -88,8 +88,42 @@
       opacity: 100
     }
   ];
+  var decorationLayerDefinition = {
+    id: "star-decorations",
+    type: "decoration",
+    sourceType: "generated-stars",
+    name: "星星装饰",
+    thumbnail: "✦",
+    x: 50,
+    y: 50,
+    scale: 100,
+    rotation: 0,
+    opacity: 100
+  };
   var layerSequence = 0;
   var textLayerStore = Object.create(null);
+
+  function createDefaultDecorationLayer() {
+    return {
+      id: decorationLayerDefinition.id,
+      type: decorationLayerDefinition.type,
+      sourceType: decorationLayerDefinition.sourceType,
+      name: decorationLayerDefinition.name,
+      thumbnail: decorationLayerDefinition.thumbnail,
+      x: decorationLayerDefinition.x,
+      y: decorationLayerDefinition.y,
+      scale: decorationLayerDefinition.scale,
+      rotation: decorationLayerDefinition.rotation,
+      opacity: decorationLayerDefinition.opacity,
+      defaultX: decorationLayerDefinition.x,
+      defaultY: decorationLayerDefinition.y,
+      defaultScale: decorationLayerDefinition.scale,
+      defaultRotation: decorationLayerDefinition.rotation,
+      defaultOpacity: decorationLayerDefinition.opacity,
+      visible: true,
+      locked: false
+    };
+  }
 
   function createDefaultTextLayers() {
     textLayerStore = Object.create(null);
@@ -117,6 +151,7 @@
       };
     });
     return [
+      createDefaultDecorationLayer(),
       textLayerStore["text-subtitle"],
       textLayerStore["text-line-2"],
       textLayerStore["text-line-1"]
@@ -739,6 +774,14 @@
     return Boolean(layer && layer.type === "text");
   }
 
+  function isDecorationLayer(layer) {
+    return Boolean(layer && layer.type === "decoration");
+  }
+
+  function isArtworkLayer(layer) {
+    return isTextLayer(layer) || isDecorationLayer(layer);
+  }
+
   function isImageLayer(layer) {
     return Boolean(layer && (layer.type === "image" || layer.type === "gif"));
   }
@@ -780,6 +823,9 @@
     if (layer.type === "text") {
       return layer.textKey === "subtitle" ? "英文文字图层" : "中文文字图层";
     }
+    if (isDecorationLayer(layer)) {
+      return "星星装饰图层";
+    }
     if (layer.type === "gif") {
       return "动态 GIF 图层";
     }
@@ -813,7 +859,7 @@
     if (!layer) {
       return;
     }
-    if (isTextLayer(layer)) {
+    if (isArtworkLayer(layer)) {
       layer.scale = Number(elements.artworkScale.value);
       layer.x = Number(elements.artworkX.value);
       layer.y = Number(elements.artworkY.value);
@@ -845,7 +891,7 @@
       return;
     }
 
-    if (isTextLayer(layer)) {
+    if (isArtworkLayer(layer)) {
       selectedOfficialAsset = null;
       state.overlayLocked = false;
       state.artworkScale = layer.scale;
@@ -857,7 +903,7 @@
       elements.artworkX.value = layer.x;
       elements.artworkY.value = layer.y;
       elements.artworkRotation.value = layer.rotation;
-      updateTextTransformInterface(layer);
+      updateTextTransformInterface(isTextLayer(layer) ? layer : null);
       syncSelectedLayerControls(layer);
       return;
     }
@@ -936,7 +982,7 @@
     elements.selectedLayerName.textContent = layer.name;
     elements.selectedLayerType.textContent = layerTypeLabel(layer);
     elements.selectedLayerPreview.replaceChildren();
-    if (isTextLayer(layer)) {
+    if (isArtworkLayer(layer)) {
       elements.selectedLayerPreview.textContent = layer.thumbnail || "T";
     } else {
       var preview = document.createElement("img");
@@ -945,7 +991,7 @@
       elements.selectedLayerPreview.appendChild(preview);
     }
 
-    elements.selectedLayerScale.min = isTextLayer(layer) ? "20" : "5";
+    elements.selectedLayerScale.min = isArtworkLayer(layer) ? "20" : "5";
     elements.selectedLayerScale.value = layer.scale;
     elements.selectedLayerX.value = layer.x;
     elements.selectedLayerY.value = layer.y;
@@ -1004,7 +1050,9 @@
     );
     elements.selectedLayerDeleteButton.textContent = isTextLayer(layer)
       ? "停用文字图层"
-      : "删除图层";
+      : isDecorationLayer(layer)
+        ? "隐藏星星装饰"
+        : "删除图层";
   }
 
   function updateLayerActionState() {
@@ -1069,7 +1117,7 @@
       '<label><span>大小 <output>' +
       layer.scale +
       '%</output></span><input type="range" min="' +
-      (isTextLayer(layer) ? "20" : "5") +
+      (isArtworkLayer(layer) ? "20" : "5") +
       '" max="240" value="' +
       layer.scale +
       '" data-layer-property="scale"' +
@@ -1182,7 +1230,7 @@
         handle.setAttribute("aria-hidden", "true");
 
         thumbnail.className = "layer-thumbnail";
-        if (isTextLayer(layer)) {
+        if (isArtworkLayer(layer)) {
           thumbnail.textContent = layer.thumbnail || "T";
         } else {
           var image = document.createElement("img");
@@ -1236,13 +1284,18 @@
             action: "duplicate",
             label: "复制图层",
             icon: "copy",
-            hidden: isTextLayer(layer)
+            hidden: !isImageLayer(layer)
           },
           {
             action: "delete",
-            label: isTextLayer(layer) ? "停用文字图层" : "删除图层",
+            label: isTextLayer(layer)
+              ? "停用文字图层"
+              : isDecorationLayer(layer)
+                ? "隐藏星星装饰"
+                : "删除图层",
             icon: "trash",
-            danger: true
+            danger: true,
+            hidden: isDecorationLayer(layer)
           }
         ].forEach(function (config) {
           if (config.hidden) {
@@ -1304,7 +1357,7 @@
   function addLayer(layer, options) {
     options = options || {};
     var firstTextIndex = layers.findIndex(function (item) {
-      return isTextLayer(item);
+      return isArtworkLayer(item);
     });
     if (options.belowArtwork && firstTextIndex >= 0) {
       layers.splice(firstTextIndex, 0, layer);
@@ -1320,6 +1373,13 @@
   function removeLayer(layerId, notifyUser) {
     var layer = getLayer(layerId);
     if (!layer) {
+      return;
+    }
+    if (isDecorationLayer(layer)) {
+      setLayerVisibility(layer, false);
+      if (notifyUser) {
+        showToast("星星装饰已隐藏，可在图层栏重新显示");
+      }
       return;
     }
     var index = layers.indexOf(layer);
@@ -1456,7 +1516,7 @@
 
   function resetArtworkTransform() {
     var layer = getActiveLayer();
-    if (!isTextLayer(layer)) {
+    if (!isArtworkLayer(layer)) {
       return;
     }
     layer.scale = layer.defaultScale;
@@ -1568,7 +1628,7 @@
     if (!layer || layer.locked) {
       return;
     }
-    if (isTextLayer(layer)) {
+    if (isArtworkLayer(layer)) {
       resetArtworkTransform();
     } else {
       resetOverlayTransform();
@@ -1585,7 +1645,7 @@
       return;
     }
     var ranges = {
-      scale: [isTextLayer(layer) ? 20 : 5, 240],
+      scale: [isArtworkLayer(layer) ? 20 : 5, 240],
       x: [0, 100],
       y: [0, 100],
       rotation: [-180, 180],
@@ -1625,7 +1685,9 @@
       updateCanvasSelection(lastPreviewResult);
       scheduleRender();
       if (notifyUser) {
-        showToast(layer.locked ? "文字图层已锁定" : "文字图层已解锁");
+        showToast(
+          layer.name + (layer.locked ? "已锁定" : "已解锁")
+        );
       }
     }
     scheduleHistoryCapture();
@@ -2160,6 +2222,27 @@
     };
   }
 
+  function decorationLayerGeometry(layer, width, height) {
+    if (!layer) {
+      return null;
+    }
+    var scale = clamp(layer.scale / 100, 0.2, 2.4);
+    return {
+      centerX: width * (layer.x / 100),
+      centerY: height * (layer.y / 100),
+      width: width * scale,
+      height: height * scale,
+      angle: layer.rotation,
+      label:
+        layer.name +
+        " · " +
+        Math.round(layer.scale) +
+        "% · " +
+        Math.round(layer.rotation) +
+        "°"
+    };
+  }
+
   function normalizeRotation(value) {
     var normalized = ((value + 180) % 360 + 360) % 360 - 180;
     return normalized === -180 ? 180 : normalized;
@@ -2173,6 +2256,12 @@
     var height = result.height;
 
     var layer = getLayer(target);
+    if (isDecorationLayer(layer)) {
+      if (layer.locked || !layer.visible) {
+        return null;
+      }
+      return decorationLayerGeometry(layer, width, height);
+    }
     if (isImageLayer(layer)) {
       var layerImage = imageForLayer(layer);
       if (
@@ -3199,7 +3288,7 @@
     var outline = mixColor(state.primaryColor, "#ffffff", 0.28);
 
     ctx.save();
-    ctx.globalAlpha = clamp(0.55 + density * 0.45, 0, 1);
+    ctx.globalAlpha *= clamp(0.55 + density * 0.45, 0, 1);
 
     drawStar(ctx, width * 0.045, height * 0.52, base * 0.05, outline, 5, true, -0.18);
     drawStar(ctx, width * 0.06, height * 0.65, base * 0.034, sky, 5, false, -0.35);
@@ -3913,6 +4002,31 @@
     ctx.restore();
   }
 
+  function drawGeneratedDecorationLayer(
+    ctx,
+    width,
+    height,
+    layer,
+    exclusionRects,
+    combinedSeed
+  ) {
+    var scale = clamp(layer.scale / 100, 0.2, 2.4);
+    ctx.save();
+    ctx.globalAlpha = clamp(
+      (Number.isFinite(layer.opacity) ? layer.opacity : 100) / 100,
+      0,
+      1
+    );
+    ctx.translate(width * (layer.x / 100), height * (layer.y / 100));
+    ctx.rotate((layer.rotation * Math.PI) / 180);
+    ctx.scale(scale, scale);
+    ctx.translate(-width / 2, -height / 2);
+    drawReferenceClusters(ctx, width, height, combinedSeed);
+    drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
+    drawLowerConfetti(ctx, width, height, combinedSeed, exclusionRects);
+    ctx.restore();
+  }
+
   function renderArtwork(canvas, scale, options) {
     var dimensions = dimensionsFromValue(state.canvasSize);
     var width = dimensions.width;
@@ -4047,11 +4161,6 @@
     }
     var anchorTitleLayerId = anchorTitleLayer ? anchorTitleLayer.id : "";
 
-    var decorationIndex = layers.findIndex(isTextLayer);
-    if (decorationIndex < 0) {
-      decorationIndex = 0;
-    }
-
     function drawCompositionLayer(layer) {
       if (!layer.visible) {
         return;
@@ -4075,14 +4184,19 @@
           pixelScale,
           anchorTitleLayerId
         );
+      } else if (isDecorationLayer(layer)) {
+        drawGeneratedDecorationLayer(
+          ctx,
+          width,
+          height,
+          layer,
+          exclusionRects,
+          combinedSeed
+        );
       }
     }
 
-    layers.slice(0, decorationIndex).forEach(drawCompositionLayer);
-    drawReferenceClusters(ctx, width, height, combinedSeed);
-    drawDecorations(ctx, width, height, exclusionRects, combinedSeed);
-    drawLowerConfetti(ctx, width, height, combinedSeed, exclusionRects);
-    layers.slice(decorationIndex).forEach(drawCompositionLayer);
+    layers.forEach(drawCompositionLayer);
 
     var activeTitleLayouts = visibleTextLayers
       .filter(function (layer) {
@@ -4136,6 +4250,9 @@
       artworkBounds: artworkBounds,
       isEmpty:
         !visibleTextLayers.length &&
+        !layers.some(function (layer) {
+          return isDecorationLayer(layer) && layer.visible && state.density > 0;
+        }) &&
         !getImageLayers().some(function (layer) {
           return layer.visible && imageForLayer(layer, renderTime, forcedLayerImages);
         })
@@ -4282,6 +4399,11 @@
       getLayer("text-line-1") ? state.line1 : "",
       getLayer("text-line-2") ? state.line2 : "",
       getLayer("text-subtitle") ? state.subtitle : "",
+      layers.some(function (layer) {
+        return isDecorationLayer(layer) && layer.visible && state.density > 0;
+      })
+        ? "星星装饰"
+        : "",
       getImageLayers()
         .filter(function (layer) {
           return layer.visible;

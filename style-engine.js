@@ -98,8 +98,48 @@
   }
 
   function loadArrayBuffer(url, errorPrefix, onProgress) {
-    return fetch(
-      freshResourceUrl(url),
+    var resourceUrl = freshResourceUrl(url);
+    if (typeof global.fetch !== "function") {
+      return new Promise(function (resolve, reject) {
+        if (typeof global.XMLHttpRequest !== "function") {
+          reject(new Error(errorPrefix + url));
+          return;
+        }
+        var request = new global.XMLHttpRequest();
+        request.open("GET", resourceUrl, true);
+        request.responseType = "arraybuffer";
+        request.onprogress = function (event) {
+          onProgress(
+            Number(event.loaded) || 0,
+            event.lengthComputable ? Number(event.total) || 0 : 0,
+            false
+          );
+        };
+        request.onload = function () {
+          if (
+            request.status < 200 ||
+            request.status >= 300 ||
+            !request.response
+          ) {
+            reject(new Error(errorPrefix + url));
+            return;
+          }
+          onProgress(
+            request.response.byteLength,
+            request.response.byteLength,
+            true
+          );
+          resolve(request.response);
+        };
+        request.onerror = function () {
+          reject(new Error(errorPrefix + url));
+        };
+        request.send();
+      });
+    }
+
+    return global.fetch(
+      resourceUrl,
       cacheRefreshToken ? { cache: "reload" } : undefined
     ).then(function (response) {
       if (!response.ok) {
@@ -405,6 +445,9 @@
     if (!font) {
       return null;
     }
+    if (typeof global.Path2D !== "function") {
+      return null;
+    }
     var source = font.getPath(
       glyph.char,
       -glyph.naturalWidth / 2,
@@ -413,7 +456,7 @@
       { kerning: false }
     );
     var warp = makeWarp(glyph, template, fontSize);
-    var path = new Path2D();
+    var path = new global.Path2D();
 
     source.commands.forEach(function (command) {
       var p;

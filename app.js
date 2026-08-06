@@ -427,6 +427,9 @@
     exportTitle: document.getElementById("exportTitle"),
     exportDescription: document.getElementById("exportDescription"),
     renderStatus: document.getElementById("renderStatus"),
+    canvasCompatibilityNotice: document.getElementById(
+      "canvasCompatibilityNotice"
+    ),
     downloadButton: document.getElementById("downloadButton"),
     downloadButtonIcon: document.getElementById("downloadButtonIcon"),
     downloadButtonLabel: document.getElementById("downloadButtonLabel"),
@@ -4587,7 +4590,15 @@
       canvas.style.aspectRatio = width + " / " + height;
     }
 
-    var ctx = canvas.getContext("2d", { alpha: true });
+    var ctx = null;
+    try {
+      ctx = canvas.getContext("2d", { alpha: true });
+    } catch (error) {
+      ctx = canvas.getContext("2d");
+    }
+    if (!ctx) {
+      throw new Error("Canvas 2D context is unavailable");
+    }
     ctx.setTransform(pixelScale, 0, 0, pixelScale, 0, 0);
     ctx.clearRect(0, 0, width, height);
     if (state.backgroundMode === "light" || state.backgroundMode === "dark") {
@@ -5049,13 +5060,33 @@
       : statusText;
   }
 
+  function renderPreviewSafely() {
+    try {
+      renderPreview();
+      elements.canvasStage.classList.remove("canvas-load-failed");
+      if (elements.canvasCompatibilityNotice) {
+        elements.canvasCompatibilityNotice.hidden = true;
+      }
+      return true;
+    } catch (error) {
+      console.error("Canvas preview could not be rendered.", error);
+      elements.canvas.removeAttribute("aria-busy");
+      elements.canvasStage.classList.add("canvas-load-failed");
+      if (elements.canvasCompatibilityNotice) {
+        elements.canvasCompatibilityNotice.hidden = false;
+      }
+      elements.renderStatus.textContent = "当前浏览器未能启动画布";
+      return false;
+    }
+  }
+
   function scheduleRender() {
     if (renderFrame) {
       cancelAnimationFrame(renderFrame);
     }
     renderFrame = requestAnimationFrame(function () {
       renderFrame = 0;
-      renderPreview();
+      renderPreviewSafely();
     });
   }
 
@@ -6886,16 +6917,28 @@
 
   window.addEventListener("lettering-atlas-glyph-ready", scheduleRender);
 
+  if ("scrollRestoration" in window.history) {
+    window.history.scrollRestoration = "manual";
+  }
+  anchorFixedViewportAfterLayout(true);
+  applyStateToControls();
+  setEditorSection(activeEditorSection, { resetScroll: false });
+  renderPreviewSafely();
+  initializeHistory();
+  restoreCachedOverlay();
+
   if (styleEngine) {
-    vectorEngineReady = styleEngine
-      .init({
-        longcang: "./assets/fonts/LongCang-Regular.ttf",
-        qingke: "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
-        kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
-        kalam: "./assets/fonts/Kalam-Bold.ttf",
-        princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-      }, "./assets/font-atlas/runtime-glyph-index.json?v=4", function (progress) {
-        setFontLoadingProgress(progress * 92);
+    vectorEngineReady = Promise.resolve()
+      .then(function () {
+        return styleEngine.init({
+          longcang: "./assets/fonts/LongCang-Regular.ttf",
+          qingke: "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
+          kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
+          kalam: "./assets/fonts/Kalam-Bold.ttf",
+          princess: "./assets/fonts/PrincessSofia-Regular.ttf"
+        }, "./assets/font-atlas/runtime-glyph-index.json?v=4", function (progress) {
+          setFontLoadingProgress(progress * 92);
+        });
       })
       .then(function () {
         scheduleRender();
@@ -6906,18 +6949,9 @@
         return null;
       });
   } else {
+    vectorEngineReady = Promise.resolve(null);
     showFontLoadingError(new Error("Lettering style engine is unavailable"));
   }
-
-  if ("scrollRestoration" in window.history) {
-    window.history.scrollRestoration = "manual";
-  }
-  anchorFixedViewportAfterLayout(true);
-  applyStateToControls();
-  setEditorSection(activeEditorSection, { resetScroll: false });
-  renderPreview();
-  initializeHistory();
-  restoreCachedOverlay();
   if (document.fonts && document.fonts.load) {
     logoFontsReady = Promise.all([
       document.fonts.load(

@@ -4425,10 +4425,18 @@ body::before {
       "section-nav"
       "inspector";
     grid-template-columns: minmax(0, 1fr);
-    grid-template-rows: clamp(290px, 43dvh, 400px) auto minmax(0, 1fr);
+    /* Petal and older Chromium builds may reject dynamic viewport units. */
+    grid-template-rows: 360px auto minmax(0, 1fr);
+    grid-template-rows: clamp(290px, 43vh, 400px) auto minmax(0, 1fr);
     min-height: 0;
     overflow: hidden;
     flex: 1 1 auto;
+  }
+
+  @supports (height: 100dvh) {
+    .workspace {
+      grid-template-rows: clamp(290px, 43dvh, 400px) auto minmax(0, 1fr);
+    }
   }
 
   .preview-panel {
@@ -4505,7 +4513,14 @@ body::before {
 
 @media (max-width: 560px) {
   .workspace {
-    grid-template-rows: clamp(270px, 40dvh, 340px) auto minmax(0, 1fr);
+    grid-template-rows: 320px auto minmax(0, 1fr);
+    grid-template-rows: clamp(270px, 40vh, 340px) auto minmax(0, 1fr);
+  }
+
+  @supports (height: 100dvh) {
+    .workspace {
+      grid-template-rows: clamp(270px, 40dvh, 340px) auto minmax(0, 1fr);
+    }
   }
 
   .preview-panel {
@@ -4546,6 +4561,46 @@ body::before {
   .export-control-section .export-bar {
     padding: 12px;
   }
+}
+
+.canvas-compatibility-notice {
+  position: absolute;
+  z-index: 20;
+  top: 50%;
+  left: 50%;
+  width: min(320px, calc(100% - 32px));
+  margin: 0;
+  padding: 14px 16px;
+  border: 1px solid rgba(174, 83, 67, 0.3);
+  border-radius: 12px;
+  color: #713d34;
+  background: rgba(255, 249, 247, 0.96);
+  box-shadow: 0 8px 24px rgba(63, 39, 34, 0.16);
+  transform: translate(-50%, -50%);
+  text-align: center;
+}
+
+.canvas-stage {
+  position: relative;
+}
+
+.canvas-compatibility-notice strong,
+.canvas-compatibility-notice span {
+  display: block;
+}
+
+.canvas-compatibility-notice strong {
+  font-size: 12px;
+}
+
+.canvas-compatibility-notice span {
+  margin-top: 5px;
+  font-size: 9px;
+  line-height: 1.5;
+}
+
+.canvas-stage.canvas-load-failed .canvas-frame {
+  opacity: 0.18;
 }
 
 /* Independent text layers and inline color editor */
@@ -5000,6 +5055,12 @@ body::before {
   .canvas-text-layer-switches {
     flex: 0 0 auto;
     margin: 0 0 6px;
+  }
+
+  /* Initial size for engines without CSS aspect-ratio; JS refines it later. */
+  .canvas-frame {
+    height: 46.4375vw;
+    max-height: 100%;
   }
 
   .canvas-text-layer-switches > span {

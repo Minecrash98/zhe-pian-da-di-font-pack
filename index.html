@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=25" />
+    <link rel="stylesheet" href="./styles.css?v=26" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -930,6 +930,15 @@
           </div>
 
           <div class="canvas-stage" id="canvasStage">
+            <p
+              class="canvas-compatibility-notice"
+              id="canvasCompatibilityNotice"
+              role="alert"
+              hidden
+            >
+              <strong>画布没能启动</strong>
+              <span>请点“刷新缓存”重试，或更新浏览器后重新打开。</span>
+            </p>
             <div class="canvas-frame checker" id="canvasFrame">
               <canvas
                 id="logoCanvas"
@@ -1050,9 +1059,9 @@
 
     <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
-    <script src="./style-engine.js?v=5"></script>
+    <script src="./style-engine.js?v=6"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=31"></script>
+    <script src="./app.js?v=32"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

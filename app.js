@@ -238,8 +238,10 @@
   var historyTimer = 0;
   var historySuspended = false;
   var aboutReturnFocus = null;
+  var welcomeCloseTimer = 0;
 
   var elements = {
+    appShell: document.querySelector(".app-shell"),
     workspace: document.querySelector(".workspace"),
     editorSectionNav: document.getElementById("editorSectionNav"),
     editorSectionTabs: document.querySelectorAll("[data-editor-tab]"),
@@ -442,6 +444,8 @@
     aboutDialog: document.getElementById("aboutDialog"),
     aboutBackdrop: document.getElementById("aboutBackdrop"),
     aboutCloseButton: document.getElementById("aboutCloseButton"),
+    welcomeDialog: document.getElementById("welcomeDialog"),
+    welcomeStartButton: document.getElementById("welcomeStartButton"),
     resetButton: document.getElementById("resetButton"),
     saveAssist: document.getElementById("saveAssist"),
     saveAssistCard: document.getElementById("saveAssistCard"),
@@ -5373,6 +5377,83 @@
     }, 2100);
   }
 
+  function isWelcomeDialogOpen() {
+    return Boolean(
+      elements.welcomeDialog &&
+      !elements.welcomeDialog.hidden &&
+      !elements.welcomeDialog.classList.contains("is-leaving")
+    );
+  }
+
+  function openWelcomeDialog() {
+    if (!elements.welcomeDialog || !elements.welcomeStartButton) {
+      return;
+    }
+    window.clearTimeout(welcomeCloseTimer);
+    elements.welcomeDialog.hidden = false;
+    elements.welcomeDialog.classList.remove("is-leaving");
+    elements.welcomeStartButton.disabled = false;
+    document.body.classList.add("welcome-open");
+    if (elements.appShell) {
+      elements.appShell.setAttribute("inert", "");
+    }
+    requestAnimationFrame(function () {
+      elements.welcomeStartButton.focus({ preventScroll: true });
+    });
+  }
+
+  function finishClosingWelcomeDialog() {
+    elements.welcomeDialog.hidden = true;
+    elements.welcomeDialog.classList.remove("is-leaving");
+    elements.welcomeStartButton.disabled = false;
+    document.body.classList.remove("welcome-open");
+    if (elements.appShell) {
+      elements.appShell.removeAttribute("inert");
+    }
+    var firstEditorTab =
+      elements.editorSectionTabs && elements.editorSectionTabs[0];
+    if (firstEditorTab && typeof firstEditorTab.focus === "function") {
+      firstEditorTab.focus({ preventScroll: true });
+    }
+  }
+
+  function closeWelcomeDialog() {
+    if (!isWelcomeDialogOpen()) {
+      return;
+    }
+    elements.welcomeDialog.classList.add("is-leaving");
+    elements.welcomeStartButton.disabled = true;
+    window.clearTimeout(welcomeCloseTimer);
+    var reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    welcomeCloseTimer = window.setTimeout(
+      finishClosingWelcomeDialog,
+      reducedMotion ? 0 : 240
+    );
+  }
+
+  function trapWelcomeDialogFocus(event) {
+    var focusable = Array.from(
+      elements.welcomeDialog.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
+  }
+
   function openAboutDialog() {
     if (!elements.aboutDialog) {
       return;
@@ -6849,6 +6930,7 @@
   elements.aboutButton.addEventListener("click", openAboutDialog);
   elements.aboutBackdrop.addEventListener("click", closeAboutDialog);
   elements.aboutCloseButton.addEventListener("click", closeAboutDialog);
+  elements.welcomeStartButton.addEventListener("click", closeWelcomeDialog);
   if (elements.mobileCacheRefreshButton) {
     elements.mobileCacheRefreshButton.addEventListener(
       "click",
@@ -6865,6 +6947,15 @@
   );
 
   document.addEventListener("keydown", function (event) {
+    if (isWelcomeDialogOpen()) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeWelcomeDialog();
+      } else if (event.key === "Tab") {
+        trapWelcomeDialogFocus(event);
+      }
+      return;
+    }
     var key = String(event.key).toLowerCase();
     if ((event.ctrlKey || event.metaKey) && key === "z") {
       event.preventDefault();
@@ -6953,6 +7044,7 @@
   renderPreviewSafely();
   initializeHistory();
   restoreCachedOverlay();
+  openWelcomeDialog();
 
   if (styleEngine) {
     vectorEngineReady = Promise.resolve()

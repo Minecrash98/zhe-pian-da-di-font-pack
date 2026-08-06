@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=26" />
+    <link rel="stylesheet" href="./styles.css?v=27" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -38,6 +38,80 @@
       >
         <span class="font-loading-bar" id="fontLoadingBar"></span>
       </div>
+    </div>
+
+    <div class="welcome-dialog" id="welcomeDialog" hidden>
+      <div class="welcome-dialog-backdrop" aria-hidden="true"></div>
+      <section
+        class="welcome-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcomeTitle"
+        aria-describedby="welcomeDisclaimer"
+      >
+        <span class="welcome-card-decor welcome-card-decor-star" aria-hidden="true">✦</span>
+        <span class="welcome-card-decor welcome-card-decor-flower" aria-hidden="true">✽</span>
+        <span class="welcome-card-decor welcome-card-decor-loop" aria-hidden="true"></span>
+
+        <div class="welcome-card-topline">
+          <span class="welcome-edition">
+            <img src="./assets/orange-icon.svg?v=1" alt="" />
+            <span><b>ORANGE SUMMER</b><small>橙色夏日创作站</small></span>
+          </span>
+          <strong class="welcome-free-badge"><span>FREE</span> 免费使用</strong>
+        </div>
+
+        <h1 id="welcomeTitle">
+          欢迎来制作你的
+          <span>橙色夏日记忆！</span>
+        </h1>
+        <p class="welcome-intro">把喜欢的文字、照片和贴纸，拼成一张属于你的夏日纪念卡。</p>
+
+        <div class="welcome-author-row">
+          <div class="welcome-author">
+            <span class="welcome-author-mark" aria-hidden="true">M</span>
+            <span><small>作者 / CREATED BY</small><strong>Minecrash</strong></span>
+          </div>
+          <nav class="welcome-socials" aria-label="作者主页与项目源码">
+            <a
+              href="https://www.bilibili.com/video/BV1MYM66HEZR/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="在哔哩哔哩查看 Minecrash 的页面（新窗口打开）"
+              title="哔哩哔哩"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 3 4 3.5L16 3"></path>
+                <rect x="3" y="6.5" width="18" height="14" rx="4"></rect>
+                <path d="M8.5 11.5v3M15.5 11.5v3"></path>
+              </svg>
+              <span>哔哩哔哩</span>
+            </a>
+            <a
+              href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="在 GitHub 查看项目源码（新窗口打开）"
+              title="GitHub"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.7a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.8c-2.9.6-3.5-1.2-3.5-1.2-.5-1.2-1.2-1.5-1.2-1.5-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 1.7 2.5 1.2 3.1.9.1-.7.4-1.2.7-1.5-2.3-.3-4.7-1.2-4.7-5.3 0-1.2.4-2.1 1.1-2.9-.1-.3-.5-1.4.1-2.8 0 0 .9-.3 3.1 1.1a10.5 10.5 0 0 1 5.6 0c2.1-1.4 3-1.1 3-1.1.6 1.4.2 2.5.1 2.8.7.8 1.1 1.7 1.1 2.9 0 4.1-2.4 5-4.7 5.3.4.3.7 1 .7 2v3c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.7Z" fill="currentColor" stroke="none"></path>
+              </svg>
+              <span>GitHub</span>
+            </a>
+          </nav>
+        </div>
+
+        <p class="welcome-disclaimer" id="welcomeDisclaimer">
+          <strong>免责声明</strong>
+          本站是免费、非官方的同人创作工具，与《明日方舟》官方无隶属或合作关系；相关素材版权归《明日方舟》及其权利人所有，请勿用于商业用途。
+        </p>
+
+        <button class="welcome-start-button" id="welcomeStartButton" type="button">
+          <span><strong>开始创作～</strong><small>LET'S MAKE A SUMMER MEMORY</small></span>
+          <b aria-hidden="true">→</b>
+        </button>
+      </section>
     </div>
 
     <div class="app-shell">
@@ -1061,7 +1135,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=6"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=34"></script>
+    <script src="./app.js?v=35"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

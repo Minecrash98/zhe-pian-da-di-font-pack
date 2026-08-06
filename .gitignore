@@ -5,3 +5,5 @@ Thumbs.db
 .wrangler/
 tmp/
 screenshots/
+__pycache__/
+*.py[cod]

@@ -6,6 +6,8 @@
   var atlasImages = Object.create(null);
   var atlasLoading = Object.create(null);
   var tintCache = Object.create(null);
+  var TINT_CACHE_MAX = 300;
+  var tintCacheSize = 0;
   var cacheRefreshToken = "";
 
   try {
@@ -805,8 +807,13 @@
     context.drawImage(image, 0, 0);
     context.globalCompositeOperation = "source-in";
     context.fillStyle = color;
+    if (tintCacheSize >= TINT_CACHE_MAX) {
+      tintCache = Object.create(null);
+      tintCacheSize = 0;
+    }
     context.fillRect(0, 0, canvas.width, canvas.height);
     tintCache[cacheKey] = canvas;
+    tintCacheSize += 1;
     return canvas;
   }
 

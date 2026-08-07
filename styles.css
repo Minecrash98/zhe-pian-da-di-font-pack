@@ -1265,6 +1265,60 @@ details[open] > .precision-summary .precision-chevron {
   display: none;
 }
 
+.local-gif-experimental-note {
+  display: flex;
+  align-items: flex-start;
+  gap: 7px;
+  margin: 0;
+  padding: 8px 9px;
+  border: 1px solid rgba(252, 139, 65, 0.25);
+  border-radius: 10px;
+  color: #687983;
+  background: linear-gradient(105deg, #fff7e9, #eef9ff);
+  font-size: 9px;
+  line-height: 1.45;
+}
+
+.local-gif-experimental-note strong {
+  flex: 0 0 auto;
+  padding: 2px 6px;
+  border-radius: 999px;
+  color: #fff;
+  background: #ef7c35;
+  font-size: 8px;
+  line-height: 1.35;
+  letter-spacing: 0.02em;
+}
+
+.local-upload-status {
+  margin: 7px 2px 0;
+  color: var(--blue);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.45;
+}
+
+.custom-upload-block.is-loading .upload-button {
+  pointer-events: none;
+  opacity: 0.58;
+}
+
+.custom-upload-block.is-loading .upload-button::after {
+  width: 12px;
+  height: 12px;
+  border: 2px solid rgba(9, 98, 181, 0.2);
+  border-top-color: var(--blue);
+  border-radius: 50%;
+  content: "";
+  animation: local-upload-spin 0.8s linear infinite;
+}
+
+@keyframes local-upload-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .upload-button,
 .remove-layer-button,
 .layer-reset-button {

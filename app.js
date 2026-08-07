@@ -73,6 +73,17 @@
   var officialAssetCategory = "characters";
   var gifPreviewTimer = 0;
   var gifFrameCache = Object.create(null);
+  var gifDecoder = window.GifuctJS || null;
+  var localGifLimits = {
+    maxBytes: 15 * 1024 * 1024,
+    maxFrames: 60,
+    maxSourcePixels: 6000000,
+    maxSourceSide: 3200,
+    mobileSourcePixels: 3000000,
+    mobileSourceSide: 2400,
+    desktopFramePixels: 18000000,
+    mobileFramePixels: 10000000
+  };
   var angelinaAssets = window.ANGELINA_ASSETS || {
     characters: [],
     decorations: []
@@ -247,6 +258,7 @@
   var localAssetDbPromise = null;
   var fontLoadingPercent = 0;
   var fontLoadingHideTimer = 0;
+  var localUploadStatusTimer = 0;
   var initialFontLoadingError = null;
   var cacheRefreshInProgress = false;
   var pendingSaveFile = null;
@@ -449,6 +461,7 @@
     officialAssetsHint: document.getElementById("officialAssetsHint"),
     officialAssetGrid: document.getElementById("officialAssetGrid"),
     customUploadBlock: document.getElementById("customUploadBlock"),
+    localUploadStatus: document.getElementById("localUploadStatus"),
     overlayHint: document.getElementById("overlayHint"),
     overlayControls: document.getElementById("overlayControls"),
     overlayFileCard: document.getElementById("overlayFileCard"),
@@ -1046,11 +1059,12 @@
 
   function canvasSizeFromOverlayImage() {
     var sourceImage = canvasRatioSourceImage();
-    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
+    var dimensions = imageDimensions(sourceImage);
+    if (!dimensions.width || !dimensions.height) {
       return defaults.canvasSize;
     }
     var ratio = clamp(
-      sourceImage.naturalWidth / sourceImage.naturalHeight,
+      dimensions.width / dimensions.height,
       0.2,
       5
     );
@@ -1071,13 +1085,14 @@
       return;
     }
     var sourceImage = canvasRatioSourceImage();
-    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
+    var dimensions = imageDimensions(sourceImage);
+    if (!dimensions.width || !dimensions.height) {
       elements.autoCanvasRatioShape.style.removeProperty("width");
       elements.autoCanvasRatioShape.style.removeProperty("height");
       return;
     }
     var ratio = clamp(
-      sourceImage.naturalWidth / sourceImage.naturalHeight,
+      dimensions.width / dimensions.height,
       0.28,
       3.8
     );
@@ -1193,6 +1208,16 @@
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
+  function imageDimensions(image) {
+    if (!image) {
+      return { width: 0, height: 0 };
+    }
+    return {
+      width: Number(image.naturalWidth || image.videoWidth || image.width) || 0,
+      height: Number(image.naturalHeight || image.videoHeight || image.height) || 0
+    };
+  }
+
   function nextLayerId() {
     layerSequence += 1;
     return "layer-" + Date.now().toString(36) + "-" + layerSequence.toString(36);
@@ -1306,6 +1331,51 @@
     return "本地图片图层";
   }
 
+  function layerFrameDelay(layer, index) {
+    var delays = layer && layer.frameDelays;
+    if (delays && Number(delays[index]) > 0) {
+      return Math.max(20, Number(delays[index]));
+    }
+    return Math.max(20, Number(layer && layer.frameDelay) || 200);
+  }
+
+  function layerAnimationDuration(layer) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 0;
+    }
+    if (Number(layer.animationDuration) > 0) {
+      return Number(layer.animationDuration);
+    }
+    return layer.frames.reduce(function (duration, frame, index) {
+      return duration + layerFrameDelay(layer, index);
+    }, 0);
+  }
+
+  function layerMinimumFrameDelay(layer) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 200;
+    }
+    return layer.frames.reduce(function (smallest, frame, index) {
+      return Math.min(smallest, layerFrameDelay(layer, index));
+    }, 1000);
+  }
+
+  function frameIndexAtElapsedTime(layer, elapsed) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 0;
+    }
+    var duration = Math.max(20, layerAnimationDuration(layer));
+    var position = Math.max(0, Number(elapsed) || 0) % duration;
+    for (var index = 0; index < layer.frames.length; index += 1) {
+      var delay = layerFrameDelay(layer, index);
+      if (position < delay) {
+        return index;
+      }
+      position -= delay;
+    }
+    return layer.frames.length - 1;
+  }
+
   function imageForLayer(layer, time, forcedImages) {
     if (!layer) {
       return null;
@@ -1314,9 +1384,12 @@
       return forcedImages[layer.id];
     }
     if (layer.type === "gif" && layer.frames && layer.frames.length) {
-      var elapsed = Math.max(0, Number(time) || performance.now()) - animationStartedAt;
-      var frameDelay = Math.max(20, Number(layer.frameDelay) || 200);
-      var frameIndex = Math.floor(elapsed / frameDelay) % layer.frames.length;
+      var clock = time == null ? performance.now() : Number(time);
+      if (!Number.isFinite(clock)) {
+        clock = performance.now();
+      }
+      var elapsed = Math.max(0, clock - animationStartedAt);
+      var frameIndex = frameIndexAtElapsedTime(layer, elapsed);
       return layer.frames[frameIndex];
     }
     return layer.image || null;
@@ -2205,7 +2278,8 @@
       name: layer.name + " 副本",
       x: clamp(layer.x + 4, 0, 100),
       y: clamp(layer.y + 4, 0, 100),
-      frames: layer.frames ? layer.frames.slice() : []
+      frames: layer.frames ? layer.frames.slice() : [],
+      frameDelays: layer.frameDelays ? layer.frameDelays.slice() : []
     });
     var index = layers.indexOf(layer);
     layers.splice(index + 1, 0, duplicate);
@@ -2765,10 +2839,394 @@
     image.src = source;
   }
 
+  function setLocalUploadBusy(busy) {
+    if (!elements.customUploadBlock || !elements.overlayFile) {
+      return;
+    }
+    window.clearTimeout(localUploadStatusTimer);
+    elements.customUploadBlock.classList.toggle("is-loading", Boolean(busy));
+    elements.overlayFile.disabled = Boolean(busy);
+    if (busy) {
+      elements.customUploadBlock.setAttribute("aria-busy", "true");
+    } else {
+      elements.customUploadBlock.removeAttribute("aria-busy");
+      if (elements.localUploadStatus && !elements.localUploadStatus.hidden) {
+        localUploadStatusTimer = window.setTimeout(function () {
+          elements.localUploadStatus.hidden = true;
+        }, 3600);
+      }
+    }
+  }
+
+  function setLocalUploadMessage(message) {
+    if (!elements.localUploadStatus) {
+      return;
+    }
+    window.clearTimeout(localUploadStatusTimer);
+    elements.localUploadStatus.textContent = message || "";
+    elements.localUploadStatus.hidden = !message;
+  }
+
+  function localGifError(code, message) {
+    var error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function readFileAsArrayBuffer(file) {
+    if (file && typeof file.arrayBuffer === "function") {
+      return file.arrayBuffer();
+    }
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(reader.result);
+      };
+      reader.onerror = function () {
+        reject(localGifError("GIF_READ_FAILED", "浏览器没能读出这个文件"));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function localGifOutputSize(width, height, frameCount) {
+    var mobile = isMobileSaveBrowser();
+    var framePixelBudget = mobile
+      ? localGifLimits.mobileFramePixels
+      : localGifLimits.desktopFramePixels;
+    var maxSide = mobile ? 900 : 1200;
+    var scale = Math.min(
+      1,
+      maxSide / Math.max(width, height),
+      Math.sqrt(framePixelBudget / Math.max(1, width * height * frameCount))
+    );
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+      compressed: scale < 0.995
+    };
+  }
+
+  function decodeLocalGifFrames(arrayBuffer, onProgress) {
+    if (
+      !gifDecoder ||
+      typeof gifDecoder.parseGIF !== "function" ||
+      typeof gifDecoder.decompressFrame !== "function"
+    ) {
+      return Promise.reject(
+        localGifError(
+          "GIF_DECODER_UNAVAILABLE",
+          "GIF 解码组件没有加载，请刷新后再试"
+        )
+      );
+    }
+
+    var parsedGif;
+    try {
+      parsedGif = gifDecoder.parseGIF(arrayBuffer);
+    } catch (error) {
+      return Promise.reject(
+        localGifError("GIF_PARSE_FAILED", "文件不是有效的 GIF，或文件已经损坏")
+      );
+    }
+
+    var width = Number(parsedGif && parsedGif.lsd && parsedGif.lsd.width) || 0;
+    var height = Number(parsedGif && parsedGif.lsd && parsedGif.lsd.height) || 0;
+    var sourcePixels = width * height;
+    var mobile = isMobileSaveBrowser();
+    var maxSourcePixels = mobile
+      ? localGifLimits.mobileSourcePixels
+      : localGifLimits.maxSourcePixels;
+    var maxSourceSide = mobile
+      ? localGifLimits.mobileSourceSide
+      : localGifLimits.maxSourceSide;
+    var rawFrames = (parsedGif.frames || []).filter(function (frame) {
+      return Boolean(frame && frame.image);
+    });
+
+    if (!width || !height || !rawFrames.length) {
+      return Promise.reject(
+        localGifError("GIF_EMPTY", "GIF 中没有可用的画面")
+      );
+    }
+    if (
+      Math.max(width, height) > maxSourceSide ||
+      sourcePixels > maxSourcePixels
+    ) {
+      return Promise.reject(
+        localGifError(
+          "GIF_DIMENSIONS_TOO_LARGE",
+          "GIF 原始尺寸过大，请先缩小到 " + maxSourceSide + " px 长边以内"
+        )
+      );
+    }
+    if (rawFrames.length > localGifLimits.maxFrames) {
+      return Promise.reject(
+        localGifError(
+          "GIF_TOO_MANY_FRAMES",
+          "GIF 有 " + rawFrames.length + " 帧，实验功能目前最多支持 60 帧"
+        )
+      );
+    }
+
+    var invalidFrame = rawFrames.some(function (frame) {
+      var descriptor = frame.image && frame.image.descriptor;
+      var frameWidth = Number(descriptor && descriptor.width) || 0;
+      var frameHeight = Number(descriptor && descriptor.height) || 0;
+      return (
+        !frameWidth ||
+        !frameHeight ||
+        Math.max(frameWidth, frameHeight) > maxSourceSide ||
+        frameWidth * frameHeight > maxSourcePixels
+      );
+    });
+    if (invalidFrame) {
+      return Promise.reject(
+        localGifError("GIF_FRAME_TOO_LARGE", "GIF 中包含尺寸异常的帧")
+      );
+    }
+
+    var outputSize = localGifOutputSize(width, height, rawFrames.length);
+    var compositeCanvas = document.createElement("canvas");
+    compositeCanvas.width = width;
+    compositeCanvas.height = height;
+    var compositeContext = compositeCanvas.getContext("2d");
+    var patchCanvas = document.createElement("canvas");
+    var patchContext = patchCanvas.getContext("2d");
+    if (!compositeContext || !patchContext) {
+      return Promise.reject(
+        localGifError("GIF_CANVAS_UNAVAILABLE", "当前浏览器无法建立 GIF 画布")
+      );
+    }
+
+    var frames = [];
+    var frameDelays = [];
+    var frameIndex = 0;
+    var previousDisposal = 0;
+    var previousDimensions = null;
+    var previousRestore = null;
+
+    function applyPreviousDisposal() {
+      if (previousDisposal === 2 && previousDimensions) {
+        compositeContext.clearRect(
+          previousDimensions.left,
+          previousDimensions.top,
+          previousDimensions.width,
+          previousDimensions.height
+        );
+      } else if (previousDisposal === 3 && previousRestore) {
+        compositeContext.putImageData(previousRestore, 0, 0);
+      }
+    }
+
+    function decodeNextFrame() {
+      if (frameIndex >= rawFrames.length) {
+        return Promise.resolve({
+          frames: frames,
+          frameDelays: frameDelays,
+          duration: frameDelays.reduce(function (total, delay) {
+            return total + delay;
+          }, 0),
+          width: width,
+          height: height,
+          outputWidth: outputSize.width,
+          outputHeight: outputSize.height,
+          compressed: outputSize.compressed
+        });
+      }
+
+      var decodedFrame;
+      try {
+        decodedFrame = gifDecoder.decompressFrame(
+          rawFrames[frameIndex],
+          parsedGif.gct,
+          true
+        );
+      } catch (error) {
+        return Promise.reject(
+          localGifError(
+            "GIF_DECODE_FAILED",
+            "第 " + (frameIndex + 1) + " 帧解码失败"
+          )
+        );
+      }
+      if (!decodedFrame || !decodedFrame.patch || !decodedFrame.dims) {
+        return Promise.reject(
+          localGifError("GIF_DECODE_FAILED", "GIF 帧数据不完整")
+        );
+      }
+
+      applyPreviousDisposal();
+      var restoreBeforeFrame = null;
+      if (Number(decodedFrame.disposalType) === 3) {
+        try {
+          restoreBeforeFrame = compositeContext.getImageData(0, 0, width, height);
+        } catch (error) {
+          restoreBeforeFrame = null;
+        }
+      }
+
+      var dimensions = decodedFrame.dims;
+      patchCanvas.width = dimensions.width;
+      patchCanvas.height = dimensions.height;
+      var patchImageData = patchContext.createImageData(
+        dimensions.width,
+        dimensions.height
+      );
+      patchImageData.data.set(decodedFrame.patch);
+      patchContext.putImageData(patchImageData, 0, 0);
+      compositeContext.drawImage(
+        patchCanvas,
+        Number(dimensions.left) || 0,
+        Number(dimensions.top) || 0
+      );
+
+      var outputCanvas = document.createElement("canvas");
+      outputCanvas.width = outputSize.width;
+      outputCanvas.height = outputSize.height;
+      var outputContext = outputCanvas.getContext("2d");
+      if (!outputContext) {
+        return Promise.reject(
+          localGifError("GIF_CANVAS_UNAVAILABLE", "当前浏览器无法生成 GIF 帧")
+        );
+      }
+      outputContext.drawImage(
+        compositeCanvas,
+        0,
+        0,
+        outputSize.width,
+        outputSize.height
+      );
+      frames.push(outputCanvas);
+      frameDelays.push(clamp(Number(decodedFrame.delay) || 100, 20, 4000));
+
+      previousDisposal = Number(decodedFrame.disposalType) || 0;
+      previousDimensions = {
+        left: Number(dimensions.left) || 0,
+        top: Number(dimensions.top) || 0,
+        width: Number(dimensions.width) || 0,
+        height: Number(dimensions.height) || 0
+      };
+      previousRestore = restoreBeforeFrame;
+      decodedFrame.patch = null;
+      decodedFrame.pixels = null;
+      frameIndex += 1;
+      if (onProgress) {
+        onProgress(frameIndex / rawFrames.length);
+      }
+
+      if (frameIndex % 3 === 0) {
+        return new Promise(function (resolve) {
+          window.setTimeout(resolve, 0);
+        }).then(decodeNextFrame);
+      }
+      return decodeNextFrame();
+    }
+
+    return decodeNextFrame();
+  }
+
+  function loadLocalGifFile(file, options) {
+    options = options || {};
+    var fileName = options.name || file.name || "本地 GIF";
+    if (file.size > localGifLimits.maxBytes) {
+      var tooLargeMessage = "GIF 不能超过 15 MB";
+      setLocalUploadMessage("未添加 " + fileName + "：" + tooLargeMessage);
+      showToast(tooLargeMessage);
+      elements.overlayFile.value = "";
+      return Promise.resolve(null);
+    }
+
+    setLocalUploadMessage("正在解析 " + fileName + "…");
+    return readFileAsArrayBuffer(file)
+      .then(function (arrayBuffer) {
+        return decodeLocalGifFrames(arrayBuffer, function (progress) {
+          setLocalUploadMessage(
+            "正在解析 " + fileName + " · " + Math.round(progress * 100) + "%"
+          );
+        });
+      })
+      .then(function (decoded) {
+        var wasFirstImage = getImageLayers().length === 0;
+        var objectUrl = URL.createObjectURL(file);
+        var layer = {
+          id: nextLayerId(),
+          type: "gif",
+          sourceType: "upload",
+          name: fileName,
+          image: decoded.frames[0],
+          frames: decoded.frames,
+          frameDelay: decoded.frameDelays[0] || 100,
+          frameDelays: decoded.frameDelays,
+          animationDuration: decoded.duration,
+          officialAsset: null,
+          thumbnailSrc: objectUrl,
+          objectUrl: objectUrl,
+          bytes: options.size || file.size || 0,
+          originalWidth: decoded.width,
+          originalHeight: decoded.height,
+          decodedWidth: decoded.outputWidth,
+          decodedHeight: decoded.outputHeight,
+          locallyCompressed: decoded.compressed,
+          experimental: true,
+          scale: 100,
+          x: 50,
+          y: 50,
+          rotation: 0,
+          opacity: 100,
+          defaultScale: 100,
+          defaultX: 50,
+          defaultY: 50,
+          defaultRotation: 0,
+          defaultOpacity: 100,
+          visible: true,
+          locked: false
+        };
+        animationStartedAt = performance.now();
+        addLayer(layer, { belowArtwork: true });
+        if (wasFirstImage && options.followRatio !== false) {
+          state.canvasRatioMode = "auto";
+          state.canvasSize = canvasSizeFromOverlayImage();
+          elements.canvasSize.value = state.canvasSize;
+        }
+        elements.overlayFile.value = "";
+        updateOverlayInterface();
+        updateCanvasRatioInterface();
+        scheduleRender();
+        startGifPreviewLoop();
+        var resultMessage =
+          "GIF 已添加 · " + decoded.frames.length + " 帧" +
+          (decoded.compressed
+            ? " · 已压缩到 " + decoded.outputWidth + " × " + decoded.outputHeight
+            : "");
+        setLocalUploadMessage(resultMessage);
+        if (!options.silent) {
+          showToast(resultMessage);
+        }
+        anchorFixedViewportAfterLayout(false);
+        return layer;
+      })
+      .catch(function (error) {
+        var message = error && error.message
+          ? error.message
+          : "这个 GIF 暂时无法解码";
+        console.warn("Could not decode a local GIF.", error);
+        elements.overlayFile.value = "";
+        setLocalUploadMessage("GIF 未添加：" + message);
+        showToast("GIF 未添加：" + message);
+        return null;
+      });
+  }
+
   function loadOverlayFile(file, options) {
     options = options || {};
     if (!file) {
       return Promise.resolve(null);
+    }
+    var gifType = /^image\/gif$/i.test(file.type || "");
+    var gifName = /\.gif$/i.test(options.name || file.name || "");
+    if (gifType || gifName) {
+      return loadLocalGifFile(file, options);
     }
     var supportedType = /^(image\/png|image\/jpeg|image\/webp)$/i.test(
       file.type || ""
@@ -2777,7 +3235,7 @@
       options.name || file.name || ""
     );
     if (!supportedType && !supportedName) {
-      showToast("请选择 PNG、JPG 或 WebP 图片");
+      showToast("请选择 PNG、JPG、WebP 或 GIF 图片");
       elements.overlayFile.value = "";
       return Promise.resolve(null);
     }
@@ -2787,6 +3245,9 @@
       return Promise.resolve(null);
     }
 
+    setLocalUploadMessage(
+      "正在添加 " + (options.name || file.name || "这张图片") + "…"
+    );
     var objectUrl = URL.createObjectURL(file);
     return new Promise(function (resolve) {
       var image = new Image();
@@ -2831,6 +3292,7 @@
         if (!options.silent) {
           showToast("图片已添加为新图层");
         }
+        setLocalUploadMessage("图片已添加为新图层");
         anchorFixedViewportAfterLayout(false);
         resolve(layer);
       };
@@ -2838,6 +3300,7 @@
         URL.revokeObjectURL(objectUrl);
         elements.overlayFile.value = "";
         showToast("无法读取这张图片");
+        setLocalUploadMessage("图片未添加：浏览器无法读取这个文件");
         resolve(null);
       };
       image.src = objectUrl;
@@ -2857,6 +3320,7 @@
     var layer = getActiveLayer();
     var hasImage = isImageLayer(layer);
     var activeImage = hasImage ? imageForLayer(layer) : null;
+    var activeDimensions = imageDimensions(activeImage);
     var locked = hasImage && layer.locked;
     if (hasImage) {
       syncLayerControls(layer);
@@ -2905,23 +3369,38 @@
       if (layer.type === "gif" && officialCharacter) {
         elements.overlayFileMeta.textContent =
           "动态贴纸 · " + officialCharacter.frameCount + " 帧 · 循环播放";
+      } else if (layer.type === "gif" && layer.sourceType === "upload") {
+        var sourceWidth = layer.originalWidth || activeDimensions.width;
+        var sourceHeight = layer.originalHeight || activeDimensions.height;
+        elements.overlayFileMeta.textContent =
+          "实验性 GIF · " +
+          layer.frames.length +
+          " 帧 · " +
+          sourceWidth +
+          " × " +
+          sourceHeight +
+          " px · " +
+          formatFileSize(layer.bytes || 0) +
+          (layer.locallyCompressed
+            ? " · 预览优化至 " + activeDimensions.width + " × " + activeDimensions.height
+            : "");
       } else if (layer.sourceType === "official-decoration") {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · 官方装饰";
       } else if (layer.sourceType === "official-static") {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · 官方贴纸";
       } else {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · " +
           formatFileSize(layer.bytes || 0);
       }
@@ -2950,12 +3429,13 @@
   function drawOverlayImage(ctx, width, height, image, layer) {
     layer = layer || getActiveLayer();
     image = image || imageForLayer(layer);
-    if (!image || !image.naturalWidth || !image.naturalHeight) {
+    var dimensions = imageDimensions(image);
+    if (!dimensions.width || !dimensions.height) {
       return;
     }
     var drawWidth = width * ((layer.scale || 100) / 100);
     var drawHeight =
-      drawWidth * (image.naturalHeight / image.naturalWidth);
+      drawWidth * (dimensions.height / dimensions.width);
     var centerX = width * ((layer.x == null ? 50 : layer.x) / 100);
     var centerY = height * ((layer.y == null ? 50 : layer.y) / 100);
 
@@ -3132,13 +3612,13 @@
     }
     if (isImageLayer(layer)) {
       var layerImage = imageForLayer(layer);
+      var layerImageDimensions = imageDimensions(layerImage);
       if (
         !layer ||
         layer.locked ||
         !layer.visible ||
-        !layerImage ||
-        !layerImage.naturalWidth ||
-        !layerImage.naturalHeight
+        !layerImageDimensions.width ||
+        !layerImageDimensions.height
       ) {
         return null;
       }
@@ -3149,7 +3629,7 @@
         width: overlayWidth,
         height:
           overlayWidth *
-          (layerImage.naturalHeight / layerImage.naturalWidth),
+          (layerImageDimensions.height / layerImageDimensions.width),
         angle: layer.rotation,
         label:
           layer.name + " · " +
@@ -5536,6 +6016,7 @@
   function cloneLayerForHistory(layer) {
     var clone = Object.assign({}, layer);
     clone.frames = layer.frames ? layer.frames.slice() : [];
+    clone.frameDelays = layer.frameDelays ? layer.frameDelays.slice() : [];
     clone.officialAsset = layer.officialAsset
       ? Object.assign({}, layer.officialAsset)
       : null;
@@ -6420,13 +6901,10 @@
 
   function gifTimeline(animatedLayers) {
     var step = animatedLayers.reduce(function (smallest, layer) {
-      return Math.min(smallest, Math.max(20, Number(layer.frameDelay) || 200));
+      return Math.min(smallest, layerMinimumFrameDelay(layer));
     }, 250);
     var duration = animatedLayers.reduce(function (longest, layer) {
-      return Math.max(
-        longest,
-        Math.max(1, layer.frames.length) * Math.max(20, Number(layer.frameDelay) || 200)
-      );
+      return Math.max(longest, layerAnimationDuration(layer));
     }, step);
     duration = Math.min(4000, Math.max(step, duration));
     var frameCount = clamp(Math.ceil(duration / step), 2, 24);
@@ -6446,7 +6924,11 @@
         var asset =
           layer.officialAsset && findOfficialCharacter(layer.officialAsset.id);
         if (!asset) {
-          return layer;
+          completed += 1;
+          if (onProgress) {
+            onProgress(completed / animatedLayers.length);
+          }
+          return Promise.resolve(layer);
         }
         return loadGifFrameImages(asset).then(function (images) {
           layer.frames = images;
@@ -6474,9 +6956,7 @@
       var time = index * timeline.delay;
       var layerImages = {};
       animatedLayers.forEach(function (layer) {
-        var frameIndex =
-          Math.floor(time / Math.max(20, Number(layer.frameDelay) || 200)) %
-          layer.frames.length;
+        var frameIndex = frameIndexAtElapsedTime(layer, time);
         layerImages[layer.id] = layer.frames[frameIndex];
       });
       renderArtwork(canvas, output.scale, { layerImages: layerImages, time: time });
@@ -7483,6 +7963,10 @@
   elements.overlayFile.addEventListener("change", function () {
     anchorFixedViewport(false);
     var files = Array.from(elements.overlayFile.files || []).slice(0, 12);
+    if (!files.length) {
+      return;
+    }
+    setLocalUploadBusy(true);
     var queue = Promise.resolve();
     files.forEach(function (file, index) {
       queue = queue.then(function () {
@@ -7490,8 +7974,16 @@
       });
     });
     if ((elements.overlayFile.files || []).length > files.length) {
-      showToast("一次最多添加 12 张图片");
+      showToast("一次最多添加 12 个本地素材");
     }
+    queue.then(
+      function () {
+        setLocalUploadBusy(false);
+      },
+      function () {
+        setLocalUploadBusy(false);
+      }
+    );
     elements.overlayFile.blur();
     anchorFixedViewportAfterLayout(false);
   });

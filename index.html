@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=30" />
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -891,22 +891,27 @@
             </details>
 
             <div class="custom-upload-block" id="customUploadBlock">
-              <div class="asset-divider"><span>继续叠加本地图片</span></div>
+              <div class="asset-divider"><span>继续叠加本地图片 / GIF</span></div>
               <div class="overlay-upload-row">
                 <label class="upload-button" for="overlayFile">
                   <input
                     id="overlayFile"
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/png,image/jpeg,image/webp,image/gif,.gif"
                     multiple
                   />
                   <span aria-hidden="true">＋</span>
-                  选择图片（可多选）
+                  选择图片 / GIF（可多选）
                 </label>
                 <button id="removeOverlayButton" class="remove-layer-button legacy-layer-controls" type="button" disabled>
                   删除选中
                 </button>
               </div>
+              <p class="local-gif-experimental-note">
+                <strong>实验性 GIF</strong>
+                <span>可与文字、贴纸共存；单个不超过 15 MB、60 帧，较大画面会压缩，超限会提示。</span>
+              </p>
+              <p id="localUploadStatus" class="local-upload-status" role="status" aria-live="polite" hidden></p>
             </div>
 
             <div class="overlay-file-card legacy-layer-controls" id="overlayFileCard" aria-live="polite">
@@ -916,7 +921,7 @@
               </div>
               <span>
                 <strong id="overlayFileName">还没有添加图片</strong>
-                <small id="overlayFileMeta">PNG、JPG 或 WebP · 25 MB 以内</small>
+                <small id="overlayFileMeta">普通图片 25 MB 以内 · 实验性 GIF 15 MB 以内</small>
               </span>
             </div>
 
@@ -1200,7 +1205,8 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=7"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=37"></script>
+    <script src="./assets/vendor/gifuct.min.js?v=1"></script>
+    <script src="./app.js?v=38"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

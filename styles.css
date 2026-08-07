@@ -3263,6 +3263,228 @@ details[open] > .precision-summary .precision-chevron {
   background: #e9eded;
 }
 
+.glyph-fine-tune-card {
+  margin: 12px 0 0;
+  overflow: hidden;
+  border: 1px solid #c9dfe9;
+  border-radius: 13px;
+  background: linear-gradient(145deg, #f4fbff, #fffaf2);
+}
+
+.glyph-fine-tune-card > summary {
+  display: grid;
+  min-height: 58px;
+  padding: 10px 12px;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 10px;
+  color: #405b68;
+  list-style: none;
+  cursor: pointer;
+}
+
+.glyph-fine-tune-card > summary::-webkit-details-marker {
+  display: none;
+}
+
+.glyph-fine-tune-card > summary:hover {
+  color: var(--blue);
+}
+
+.glyph-fine-tune-summary-icon {
+  display: grid;
+  width: 34px;
+  height: 34px;
+  place-items: center;
+  border-radius: 10px;
+  color: #fff;
+  background: linear-gradient(135deg, var(--orange), #ffad4f);
+  box-shadow: 0 4px 10px rgba(227, 104, 32, 0.2);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.glyph-fine-tune-card > summary > span:nth-child(2) {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.glyph-fine-tune-card > summary strong {
+  font-size: 10px;
+}
+
+.glyph-fine-tune-card > summary small {
+  color: #819198;
+  font-size: 7px;
+  line-height: 1.4;
+}
+
+.glyph-fine-tune-card[open] > summary .precision-chevron {
+  transform: rotate(180deg);
+}
+
+.glyph-fine-tune-body {
+  padding: 12px;
+  border-top: 1px solid #d7e5ea;
+  background: rgba(255, 255, 255, 0.68);
+}
+
+.glyph-fine-tune-empty {
+  padding: 18px 10px;
+  color: #849298;
+  font-size: 9px;
+  font-weight: 700;
+  line-height: 1.55;
+  text-align: center;
+}
+
+.glyph-target-row {
+  display: grid;
+  grid-template-columns: 44px minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 9px;
+}
+
+.glyph-target-character {
+  display: grid;
+  width: 44px;
+  height: 44px;
+  place-items: center;
+  border: 1px solid #a9d4e8;
+  border-radius: 11px;
+  color: var(--blue);
+  background: #fff;
+  box-shadow: 0 3px 9px rgba(19, 93, 134, 0.1);
+  font-size: 21px;
+  font-weight: 800;
+}
+
+.glyph-target-copy {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.glyph-target-copy strong {
+  overflow: hidden;
+  color: #3d535e;
+  font-size: 9px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glyph-target-copy small {
+  overflow: hidden;
+  color: #7d8d94;
+  font-size: 7px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.glyph-reset-button,
+.glyph-reset-all-button,
+.glyph-navigation button {
+  border: 1px solid #cfdbdf;
+  color: #526771;
+  background: #fff;
+  font: inherit;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.glyph-reset-button {
+  min-height: 31px;
+  padding: 0 9px;
+  border-radius: 999px;
+}
+
+.glyph-navigation {
+  display: grid;
+  margin: 12px 0 13px;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  align-items: center;
+  gap: 7px;
+}
+
+.glyph-navigation button {
+  display: flex;
+  min-height: 36px;
+  padding: 0 9px;
+  align-items: center;
+  justify-content: center;
+  gap: 5px;
+  border-radius: 9px;
+}
+
+.glyph-navigation output {
+  min-width: 44px;
+  color: #6b7c84;
+  font-size: 8px;
+  font-weight: 900;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+}
+
+.glyph-navigation button:hover:not(:disabled),
+.glyph-reset-button:hover:not(:disabled),
+.glyph-reset-all-button:hover:not(:disabled) {
+  color: var(--blue);
+  border-color: #8bc5e2;
+}
+
+.glyph-navigation button:disabled,
+.glyph-reset-button:disabled,
+.glyph-reset-all-button:disabled {
+  cursor: not-allowed;
+  opacity: 0.42;
+}
+
+.glyph-adjustment-controls {
+  display: grid;
+  gap: 9px;
+  padding: 11px;
+  border: 1px solid #dce5e7;
+  border-radius: 11px;
+  background: rgba(248, 250, 249, 0.88);
+}
+
+.glyph-position-grid {
+  gap: 10px;
+}
+
+.glyph-reset-all-button {
+  width: 100%;
+  min-height: 34px;
+  margin-top: 10px;
+  border-style: dashed;
+  border-radius: 9px;
+  background: rgba(255, 255, 255, 0.7);
+}
+
+@media (max-width: 560px) {
+  .glyph-target-row {
+    grid-template-columns: 44px minmax(0, 1fr);
+  }
+
+  .glyph-reset-button {
+    min-height: 38px;
+    grid-column: 1 / -1;
+    border-radius: 9px;
+  }
+
+  .glyph-navigation button {
+    min-height: 44px;
+    padding-right: 5px;
+    padding-left: 5px;
+    font-size: 8px;
+  }
+
+  .glyph-reset-all-button {
+    min-height: 40px;
+  }
+}
+
 .layer-item {
   grid-template-columns: 18px 38px minmax(0, 1fr) 32px 32px;
   gap: 7px;

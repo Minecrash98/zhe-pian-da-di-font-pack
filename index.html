@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=29" />
+    <link rel="stylesheet" href="./styles.css?v=30" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -441,7 +441,7 @@
                   <span class="text-layer-toggle-index" aria-hidden="true">1</span>
                   <span><strong>第一行中文</strong><b>已启用</b></span>
                 </button>
-                <output id="line1Count">7</output>
+                <output id="line1Count">6</output>
               </div>
               <input id="line1" type="text" value="直到群友变成" autocomplete="off" aria-label="第一行中文" />
             </div>
@@ -474,6 +474,67 @@
                 aria-label="英文小字"
               />
             </div>
+
+            <details class="glyph-fine-tune-card" id="glyphFineTuneCard">
+              <summary>
+                <span class="glyph-fine-tune-summary-icon" aria-hidden="true">字</span>
+                <span>
+                  <strong>逐字高级微调</strong>
+                  <small>文字确定后，单独调整每一个字</small>
+                </span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="glyph-fine-tune-body">
+                <div class="glyph-fine-tune-empty" id="glyphFineTuneEmpty" hidden>
+                  请先输入并启用至少一个文字
+                </div>
+                <div id="glyphFineTuneEditor">
+                  <div class="glyph-target-row" aria-live="polite">
+                    <span class="glyph-target-character" id="glyphTargetCharacter" aria-hidden="true">直</span>
+                    <span class="glyph-target-copy">
+                      <strong id="glyphTargetLabel">第一行中文 · 第 1 / 7 字</strong>
+                      <small id="glyphTargetHint">当前微调“直”</small>
+                    </span>
+                    <button class="glyph-reset-button" id="glyphResetButton" type="button">复位当前字</button>
+                  </div>
+
+                  <div class="glyph-navigation" aria-label="切换需要微调的文字">
+                    <button id="previousGlyphButton" type="button">
+                      <span aria-hidden="true">←</span>上一个字
+                    </button>
+                    <output id="glyphTargetProgress">1 / 40</output>
+                    <button id="nextGlyphButton" type="button">
+                      下一个字<span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+
+                  <div class="glyph-adjustment-controls">
+                    <label class="range-field compact-range">
+                      <span><span>当前字大小</span><output id="glyphScaleValue">100%</output></span>
+                      <input id="glyphScale" type="range" min="30" max="250" step="1" value="100" />
+                    </label>
+                    <div class="two-column glyph-position-grid">
+                      <label class="range-field compact-range">
+                        <span><span>左右位置</span><output id="glyphOffsetXValue">0%</output></span>
+                        <input id="glyphOffsetX" type="range" min="-150" max="150" step="1" value="0" />
+                      </label>
+                      <label class="range-field compact-range">
+                        <span><span>上下位置</span><output id="glyphOffsetYValue">0%</output></span>
+                        <input id="glyphOffsetY" type="range" min="-150" max="150" step="1" value="0" />
+                      </label>
+                    </div>
+                    <label class="range-field compact-range">
+                      <span><span>当前字旋转</span><output id="glyphRotationValue">0°</output></span>
+                      <input id="glyphRotation" type="range" min="-180" max="180" step="1" value="0" />
+                    </label>
+                  </div>
+
+                  <button class="glyph-reset-all-button" id="glyphResetAllButton" type="button" disabled>
+                    清除全部逐字微调
+                  </button>
+                </div>
+              </div>
+            </details>
 
             <div class="example-row" aria-label="示例文案">
               <span>换个灵感</span>
@@ -1139,7 +1200,7 @@
     <script src="./templates.js?v=3"></script>
     <script src="./style-engine.js?v=7"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=36"></script>
+    <script src="./app.js?v=37"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

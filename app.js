@@ -35,10 +35,35 @@
     overlayLayer: "background",
     overlayLocked: false,
     gifQuality: "balanced",
+    glyphAdjustments: {},
     seed: 147
   };
 
-  var state = Object.assign({}, defaults);
+  function cloneGlyphAdjustments(source) {
+    var clone = {};
+    Object.keys(source || {}).forEach(function (lineId) {
+      clone[lineId] = {};
+      Object.keys(source[lineId] || {}).forEach(function (glyphIndex) {
+        clone[lineId][glyphIndex] = Object.assign(
+          {},
+          source[lineId][glyphIndex]
+        );
+      });
+    });
+    return clone;
+  }
+
+  function createState(overrides) {
+    var next = Object.assign({}, defaults, overrides || {});
+    next.glyphAdjustments = cloneGlyphAdjustments(
+      overrides && overrides.glyphAdjustments
+        ? overrides.glyphAdjustments
+        : defaults.glyphAdjustments
+    );
+    return next;
+  }
+
+  var state = createState();
   var renderFrame = 0;
   var toastTimer = 0;
   var logoFontsReady = null;
@@ -242,6 +267,7 @@
   var historySuspended = false;
   var aboutReturnFocus = null;
   var welcomeCloseTimer = 0;
+  var activeGlyphTarget = null;
 
   var elements = {
     appShell: document.querySelector(".app-shell"),
@@ -331,6 +357,25 @@
     line1Count: document.getElementById("line1Count"),
     line2Count: document.getElementById("line2Count"),
     subtitleCount: document.getElementById("subtitleCount"),
+    glyphFineTuneCard: document.getElementById("glyphFineTuneCard"),
+    glyphFineTuneEmpty: document.getElementById("glyphFineTuneEmpty"),
+    glyphFineTuneEditor: document.getElementById("glyphFineTuneEditor"),
+    glyphTargetCharacter: document.getElementById("glyphTargetCharacter"),
+    glyphTargetLabel: document.getElementById("glyphTargetLabel"),
+    glyphTargetHint: document.getElementById("glyphTargetHint"),
+    glyphTargetProgress: document.getElementById("glyphTargetProgress"),
+    previousGlyphButton: document.getElementById("previousGlyphButton"),
+    nextGlyphButton: document.getElementById("nextGlyphButton"),
+    glyphResetButton: document.getElementById("glyphResetButton"),
+    glyphResetAllButton: document.getElementById("glyphResetAllButton"),
+    glyphScale: document.getElementById("glyphScale"),
+    glyphScaleValue: document.getElementById("glyphScaleValue"),
+    glyphOffsetX: document.getElementById("glyphOffsetX"),
+    glyphOffsetXValue: document.getElementById("glyphOffsetXValue"),
+    glyphOffsetY: document.getElementById("glyphOffsetY"),
+    glyphOffsetYValue: document.getElementById("glyphOffsetYValue"),
+    glyphRotation: document.getElementById("glyphRotation"),
+    glyphRotationValue: document.getElementById("glyphRotationValue"),
     advancedLayerMode: document.getElementById("advancedLayerMode"),
     layerModeDescription: document.getElementById("layerModeDescription"),
     layerModeStatus: document.getElementById("layerModeStatus"),
@@ -506,6 +551,294 @@
 
   function graphemeCount(text) {
     return splitGraphemes(text).length;
+  }
+
+  var neutralGlyphAdjustment = {
+    char: "",
+    x: 0,
+    y: 0,
+    scale: 100,
+    rotation: 0
+  };
+
+  function normalizedGlyphAdjustment(value, character) {
+    value = value || neutralGlyphAdjustment;
+    return {
+      char: character || value.char || "",
+      x: clamp(Number(value.x) || 0, -150, 150),
+      y: clamp(Number(value.y) || 0, -150, 150),
+      scale: clamp(Number(value.scale) || 100, 30, 250),
+      rotation: clamp(Number(value.rotation) || 0, -180, 180)
+    };
+  }
+
+  function glyphAdjustmentIsNeutral(value) {
+    return Boolean(
+      value &&
+        Number(value.x) === 0 &&
+        Number(value.y) === 0 &&
+        Number(value.scale) === 100 &&
+        Number(value.rotation) === 0
+    );
+  }
+
+  function glyphAdjustmentFor(lineId, glyphIndex, character) {
+    var lineAdjustments =
+      state.glyphAdjustments && state.glyphAdjustments[lineId];
+    var stored = lineAdjustments && lineAdjustments[String(glyphIndex)];
+    if (!stored || stored.char !== character) {
+      return normalizedGlyphAdjustment(null, character);
+    }
+    return normalizedGlyphAdjustment(stored, character);
+  }
+
+  function glyphEditorItems() {
+    var items = [];
+    textLayerDefinitions.forEach(function (definition) {
+      if (state.advancedLayerMode && !getLayer(definition.id)) {
+        return;
+      }
+      var characters = splitGraphemes(state[definition.textKey] || "");
+      var visibleCharacters = characters.filter(function (character) {
+        return Boolean(character.trim());
+      });
+      var visibleIndex = 0;
+      characters.forEach(function (character, glyphIndex) {
+        if (!character.trim()) {
+          return;
+        }
+        visibleIndex += 1;
+        items.push({
+          lineId: definition.id,
+          lineName: definition.name,
+          textKey: definition.textKey,
+          char: character,
+          glyphIndex: glyphIndex,
+          linePosition: visibleIndex,
+          lineCount: visibleCharacters.length
+        });
+      });
+    });
+    return items;
+  }
+
+  function resolveActiveGlyphTarget(items) {
+    items = items || glyphEditorItems();
+    if (!items.length) {
+      activeGlyphTarget = null;
+      return { items: items, item: null, index: -1 };
+    }
+
+    var activeIndex = -1;
+    if (activeGlyphTarget) {
+      activeIndex = items.findIndex(function (item) {
+        return (
+          item.lineId === activeGlyphTarget.lineId &&
+          item.glyphIndex === activeGlyphTarget.glyphIndex &&
+          item.char === activeGlyphTarget.char
+        );
+      });
+      if (activeIndex < 0) {
+        activeIndex = items.findIndex(function (item) {
+          return (
+            item.lineId === activeGlyphTarget.lineId &&
+            item.glyphIndex === activeGlyphTarget.glyphIndex
+          );
+        });
+      }
+    }
+    if (activeIndex < 0) {
+      activeIndex = 0;
+    }
+
+    var item = items[activeIndex];
+    activeGlyphTarget = {
+      lineId: item.lineId,
+      glyphIndex: item.glyphIndex,
+      char: item.char
+    };
+    return { items: items, item: item, index: activeIndex };
+  }
+
+  function glyphAdjustmentCount() {
+    return Object.keys(state.glyphAdjustments || {}).reduce(
+      function (total, lineId) {
+        return total + Object.keys(state.glyphAdjustments[lineId] || {}).length;
+      },
+      0
+    );
+  }
+
+  function formatSignedValue(value, suffix) {
+    var number = Number(value) || 0;
+    return (number > 0 ? "+" : "") + number + (suffix || "");
+  }
+
+  function updateGlyphEditorInterface() {
+    if (!elements.glyphFineTuneCard) {
+      return;
+    }
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    var empty = !item;
+    elements.glyphFineTuneEmpty.hidden = !empty;
+    elements.glyphFineTuneEditor.hidden = empty;
+    if (empty) {
+      return;
+    }
+
+    var adjustment = glyphAdjustmentFor(
+      item.lineId,
+      item.glyphIndex,
+      item.char
+    );
+    var adjusted = !glyphAdjustmentIsNeutral(adjustment);
+    elements.glyphTargetCharacter.textContent = item.char;
+    elements.glyphTargetLabel.textContent =
+      item.lineName +
+      " · 第 " +
+      item.linePosition +
+      " / " +
+      item.lineCount +
+      " 字";
+    elements.glyphTargetHint.textContent =
+      "当前微调“" + item.char + "” · " + (adjusted ? "已调整" : "默认位置");
+    elements.glyphTargetProgress.value =
+      resolved.index + 1 + " / " + resolved.items.length;
+    elements.previousGlyphButton.disabled = resolved.index <= 0;
+    elements.nextGlyphButton.disabled =
+      resolved.index >= resolved.items.length - 1;
+    elements.glyphResetButton.disabled = !adjusted;
+    elements.glyphResetAllButton.disabled = glyphAdjustmentCount() === 0;
+
+    elements.glyphScale.value = adjustment.scale;
+    elements.glyphOffsetX.value = adjustment.x;
+    elements.glyphOffsetY.value = adjustment.y;
+    elements.glyphRotation.value = adjustment.rotation;
+    updateRangeProgress(elements.glyphScale);
+    updateRangeProgress(elements.glyphOffsetX);
+    updateRangeProgress(elements.glyphOffsetY);
+    updateRangeProgress(elements.glyphRotation);
+    elements.glyphScaleValue.value = adjustment.scale + "%";
+    elements.glyphOffsetXValue.value = formatSignedValue(adjustment.x, "%");
+    elements.glyphOffsetYValue.value = formatSignedValue(adjustment.y, "%");
+    elements.glyphRotationValue.value = formatSignedValue(
+      adjustment.rotation,
+      "°"
+    );
+  }
+
+  function moveActiveGlyphTarget(delta) {
+    var resolved = resolveActiveGlyphTarget();
+    if (!resolved.item) {
+      return;
+    }
+    var nextIndex = clamp(
+      resolved.index + delta,
+      0,
+      resolved.items.length - 1
+    );
+    var next = resolved.items[nextIndex];
+    activeGlyphTarget = {
+      lineId: next.lineId,
+      glyphIndex: next.glyphIndex,
+      char: next.char
+    };
+    updateGlyphEditorInterface();
+  }
+
+  function setCurrentGlyphAdjustment(property, value) {
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    if (!item) {
+      return;
+    }
+    var adjustment = glyphAdjustmentFor(
+      item.lineId,
+      item.glyphIndex,
+      item.char
+    );
+    adjustment[property] = Number(value);
+    adjustment = normalizedGlyphAdjustment(adjustment, item.char);
+
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    var lineAdjustments = nextAdjustments[item.lineId] || {};
+    if (glyphAdjustmentIsNeutral(adjustment)) {
+      delete lineAdjustments[String(item.glyphIndex)];
+    } else {
+      lineAdjustments[String(item.glyphIndex)] = adjustment;
+    }
+    if (Object.keys(lineAdjustments).length) {
+      nextAdjustments[item.lineId] = lineAdjustments;
+    } else {
+      delete nextAdjustments[item.lineId];
+    }
+    state.glyphAdjustments = nextAdjustments;
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function resetCurrentGlyphAdjustment(notifyUser) {
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    if (!item) {
+      return;
+    }
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    if (nextAdjustments[item.lineId]) {
+      delete nextAdjustments[item.lineId][String(item.glyphIndex)];
+      if (!Object.keys(nextAdjustments[item.lineId]).length) {
+        delete nextAdjustments[item.lineId];
+      }
+    }
+    state.glyphAdjustments = nextAdjustments;
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast("“" + item.char + "”已恢复默认位置");
+    }
+  }
+
+  function resetAllGlyphAdjustments(notifyUser) {
+    if (!glyphAdjustmentCount()) {
+      return;
+    }
+    state.glyphAdjustments = {};
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast("已清除全部逐字微调");
+    }
+  }
+
+  function pruneGlyphAdjustmentsForLine(lineId, text) {
+    var current = state.glyphAdjustments[lineId];
+    if (!current) {
+      return;
+    }
+    var characters = splitGraphemes(text || "");
+    var nextLine = {};
+    Object.keys(current).forEach(function (glyphIndex) {
+      var index = Number(glyphIndex);
+      var character = characters[index];
+      if (
+        character &&
+        character.trim() &&
+        current[glyphIndex].char === character
+      ) {
+        nextLine[glyphIndex] = Object.assign({}, current[glyphIndex]);
+      }
+    });
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    if (Object.keys(nextLine).length) {
+      nextAdjustments[lineId] = nextLine;
+    } else {
+      delete nextAdjustments[lineId];
+    }
+    state.glyphAdjustments = nextAdjustments;
   }
 
   function setFontLoadingProgress(value) {
@@ -3663,6 +3996,7 @@
       config: config,
       tracking: tracking,
       template: template,
+      lineId: options.lineId || "",
       lineIndex: options.lineIndex || 0
     };
   }
@@ -3693,9 +4027,27 @@
   }
 
   function measureSubtitleLayout(ctx, text) {
+    var characters = splitGraphemes(text);
+    var prefix = "";
+    var prefixWidth = 0;
+    var glyphs = characters.map(function (character, index) {
+      prefix += character;
+      var nextWidth = ctx.measureText(prefix).width;
+      var glyphWidth = ctx.measureText(character).width;
+      var glyph = {
+        char: character,
+        index: index,
+        offset: nextWidth - glyphWidth,
+        width: glyphWidth,
+        advance: nextWidth - prefixWidth,
+        whitespace: !character.trim()
+      };
+      prefixWidth = nextWidth;
+      return glyph;
+    });
     return {
-      glyphs: null,
-      totalWidth: ctx.measureText(text).width
+      glyphs: glyphs,
+      totalWidth: prefixWidth
     };
   }
 
@@ -3746,7 +4098,8 @@
       family: family,
       weight: weight,
       tracking: 0,
-      glyphs: bestLayout.glyphs
+      glyphs: bestLayout.glyphs,
+      lineId: "text-subtitle"
     };
   }
 
@@ -4088,13 +4441,25 @@
       }
 
       var glyphWidth = glyph.naturalWidth * glyph.scaleX;
+      var adjustment = glyphAdjustmentFor(
+        line.lineId,
+        glyph.index,
+        glyph.char
+      );
+      var adjustmentScale = adjustment.scale / 100;
       ctx.save();
       ctx.translate(
-        x + glyphWidth / 2,
-        line.y + glyph.yOffset + (shadowPass ? state.titleShadowOffsetY : 0)
+        x + glyphWidth / 2 + line.fontSize * (adjustment.x / 100),
+        line.y +
+          glyph.yOffset +
+          line.fontSize * (adjustment.y / 100) +
+          (shadowPass ? state.titleShadowOffsetY : 0)
       );
-      ctx.rotate(glyph.rotation);
-      ctx.scale(glyph.scaleX, glyph.scaleY);
+      ctx.rotate(glyph.rotation + (adjustment.rotation * Math.PI) / 180);
+      ctx.scale(
+        glyph.scaleX * adjustmentScale,
+        glyph.scaleY * adjustmentScale
+      );
       ctx.textAlign = "left";
 
       var vectorDrawn = useVector
@@ -4216,36 +4581,58 @@
 
   function drawSubtitle(ctx, subtitle, centerX) {
     var color = mixColor(state.primaryColor, "#00101d", 0.11);
-    var tracked = Boolean(subtitle.glyphs);
+    var adjustedGlyphs = (subtitle.glyphs || []).filter(function (glyph) {
+      return !glyph.whitespace && !glyphAdjustmentIsNeutral(
+        glyphAdjustmentFor(subtitle.lineId, glyph.index, glyph.char)
+      );
+    });
+    var useAdjustedGlyphs = adjustedGlyphs.length > 0;
     ctx.save();
     ctx.font =
       subtitle.weight + " " + subtitle.fontSize + "px " + subtitle.family;
     ctx.textBaseline = "alphabetic";
-    ctx.textAlign = tracked ? "left" : "center";
+    ctx.textAlign = "center";
     ctx.lineJoin = "round";
 
-    function drawTrackedGlyphs(method) {
-      var x = centerX - subtitle.totalWidth / 2;
+    function drawAdjustedGlyphs() {
+      var startX = centerX - subtitle.totalWidth / 2;
       subtitle.glyphs.forEach(function (glyph) {
-        ctx[method](glyph.char, x, subtitle.y);
-        x += glyph.advance;
+        if (glyph.whitespace) {
+          return;
+        }
+        var adjustment = glyphAdjustmentFor(
+          subtitle.lineId,
+          glyph.index,
+          glyph.char
+        );
+        var adjustmentScale = adjustment.scale / 100;
+        ctx.save();
+        ctx.translate(
+          startX +
+            glyph.offset +
+            glyph.width / 2 +
+            subtitle.fontSize * (adjustment.x / 100),
+          subtitle.y + subtitle.fontSize * (adjustment.y / 100)
+        );
+        ctx.rotate((adjustment.rotation * Math.PI) / 180);
+        ctx.scale(adjustmentScale, adjustmentScale);
+        if (state.outline) {
+          ctx.strokeText(glyph.char, 0, 0);
+        }
+        ctx.fillText(glyph.char, 0, 0);
+        ctx.restore();
       });
     }
 
-    if (state.outline) {
-      ctx.strokeStyle = rgba(mixColor(state.skyColor, "#ffffff", 0.83), 0.86);
-      ctx.lineWidth = Math.max(1.3, subtitle.fontSize * 0.024);
-      if (tracked) {
-        drawTrackedGlyphs("strokeText");
-      } else {
+    ctx.strokeStyle = rgba(mixColor(state.skyColor, "#ffffff", 0.83), 0.86);
+    ctx.lineWidth = Math.max(1.3, subtitle.fontSize * 0.024);
+    ctx.fillStyle = color;
+    if (useAdjustedGlyphs) {
+      drawAdjustedGlyphs();
+    } else {
+      if (state.outline) {
         ctx.strokeText(subtitle.text, centerX, subtitle.y);
       }
-    }
-
-    ctx.fillStyle = color;
-    if (tracked) {
-      drawTrackedGlyphs("fillText");
-    } else {
       ctx.fillText(subtitle.text, centerX, subtitle.y);
     }
     ctx.restore();
@@ -4675,6 +5062,7 @@
           style: state.fontStyle,
           irregularity: state.irregularity,
           seed: line1Seed,
+          lineId: "text-line-1",
           lineIndex: 0,
           atlasMode: runtimeAtlasMode
         }
@@ -4702,6 +5090,7 @@
           style: state.fontStyle,
           irregularity: state.irregularity,
           seed: line2Seed,
+          lineId: "text-line-2",
           lineIndex: 1,
           atlasMode: runtimeAtlasMode
         }
@@ -4983,6 +5372,7 @@
     elements.line1Count.value = graphemeCount(state.line1);
     elements.line2Count.value = graphemeCount(state.line2);
     elements.subtitleCount.value = graphemeCount(state.subtitle);
+    updateGlyphEditorInterface();
     updateLayerModeInterface();
     updateRange(
       elements.selectedGroupLineGap,
@@ -5159,7 +5549,9 @@
       textLayers[layerId] = cloneLayerForHistory(textLayerStore[layerId]);
     });
     return {
-      state: Object.assign({}, state),
+      state: Object.assign({}, state, {
+        glyphAdjustments: cloneGlyphAdjustments(state.glyphAdjustments)
+      }),
       textLayers: textLayers,
       decorationLayer: cloneLayerForHistory(decorationLayerStore),
       letteringGroup: cloneLayerForHistory(letteringGroupStore),
@@ -5278,7 +5670,7 @@
 
   function restoreHistorySnapshot(snapshot) {
     historySuspended = true;
-    state = Object.assign({}, defaults, snapshot.state);
+    state = createState(snapshot.state);
     textLayerStore = Object.create(null);
     Object.keys(snapshot.textLayers).forEach(function (layerId) {
       textLayerStore[layerId] = cloneLayerForHistory(
@@ -6858,10 +7250,19 @@
   });
 
   [
-    { input: elements.line1, layerId: "text-line-1" },
-    { input: elements.line2, layerId: "text-line-2" },
-    { input: elements.subtitle, layerId: "text-subtitle" }
+    { input: elements.line1, layerId: "text-line-1", textKey: "line1" },
+    { input: elements.line2, layerId: "text-line-2", textKey: "line2" },
+    {
+      input: elements.subtitle,
+      layerId: "text-subtitle",
+      textKey: "subtitle"
+    }
   ].forEach(function (item) {
+    item.input.addEventListener("input", function () {
+      state[item.textKey] = item.input.value;
+      pruneGlyphAdjustmentsForLine(item.layerId, item.input.value);
+      updateGlyphEditorInterface();
+    });
     item.input.addEventListener("focus", function () {
       var targetLayer = state.advancedLayerMode
         ? getLayer(item.layerId)
@@ -6873,6 +7274,35 @@
           syncEditorSection: false
         });
       }
+    });
+  });
+
+  elements.previousGlyphButton.addEventListener("click", function () {
+    moveActiveGlyphTarget(-1);
+  });
+  elements.nextGlyphButton.addEventListener("click", function () {
+    moveActiveGlyphTarget(1);
+  });
+  elements.glyphResetButton.addEventListener("click", function () {
+    resetCurrentGlyphAdjustment(true);
+  });
+  elements.glyphResetAllButton.addEventListener("click", function () {
+    resetAllGlyphAdjustments(true);
+  });
+  elements.glyphFineTuneCard.addEventListener("toggle", function () {
+    if (elements.glyphFineTuneCard.open) {
+      updateGlyphEditorInterface();
+    }
+  });
+
+  [
+    { control: elements.glyphScale, property: "scale" },
+    { control: elements.glyphOffsetX, property: "x" },
+    { control: elements.glyphOffsetY, property: "y" },
+    { control: elements.glyphRotation, property: "rotation" }
+  ].forEach(function (item) {
+    item.control.addEventListener("input", function () {
+      setCurrentGlyphAdjustment(item.property, item.control.value);
     });
   });
 
@@ -6983,6 +7413,8 @@
       elements.line1.value = example.line1;
       elements.line2.value = example.line2;
       elements.subtitle.value = example.subtitle;
+      state.glyphAdjustments = {};
+      activeGlyphTarget = null;
       state.seed = (state.seed + 97) >>> 0;
       scheduleRender();
       scheduleHistoryCapture();
@@ -7034,7 +7466,8 @@
   });
 
   elements.resetButton.addEventListener("click", function () {
-    state = Object.assign({}, defaults);
+    state = createState();
+    activeGlyphTarget = null;
     layers = createDefaultTextLayers();
     activeLayerId = "lettering-group";
     expandedLayerId = activeLayerId;

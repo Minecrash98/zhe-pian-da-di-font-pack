@@ -225,9 +225,12 @@
   var initialFontLoadingError = null;
   var cacheRefreshInProgress = false;
   var pendingSaveFile = null;
+  var pendingSaveBlob = null;
   var pendingSaveFilename = "";
   var pendingSaveObjectUrl = "";
+  var pendingSaveDataUrl = "";
   var pendingSaveDimensions = "";
+  var pendingSaveGeneration = 0;
   var saveAssistReturnFocus = null;
   var activeEditorSection = "text";
   var stackedEditorQuery = window.matchMedia("(max-width: 900px)");
@@ -446,6 +449,7 @@
     aboutCloseButton: document.getElementById("aboutCloseButton"),
     welcomeDialog: document.getElementById("welcomeDialog"),
     welcomeStartButton: document.getElementById("welcomeStartButton"),
+    welcomeBrowserTip: document.getElementById("welcomeBrowserTip"),
     resetButton: document.getElementById("resetButton"),
     saveAssist: document.getElementById("saveAssist"),
     saveAssistCard: document.getElementById("saveAssistCard"),
@@ -534,13 +538,13 @@
       "Unable to load lettering resources"
     );
     window.clearTimeout(fontLoadingHideTimer);
-    elements.fontLoadingLabel.textContent = "字体加载失败，请刷新重试";
+    elements.fontLoadingLabel.textContent = "字形资源加载失败，请刷新重试";
     elements.fontLoadingPercent.textContent = "";
     elements.fontLoadingPopover.classList.remove("is-complete", "is-hidden");
     elements.fontLoadingPopover.classList.add("is-error");
     elements.fontLoadingTrack.setAttribute(
       "aria-valuetext",
-      "字体加载失败，请刷新重试"
+      "字形资源加载失败，请刷新重试"
     );
     elements.canvas.removeAttribute("aria-busy");
   }
@@ -593,8 +597,10 @@
             }
             styleEngine.whenAtlasReady().then(function (loaded) {
               if (loaded === false) {
-                reject(new Error("Unable to load initial atlas glyphs"));
-                return;
+                // A failed individual glyph can still be rendered with the
+                // browser font fallback. Keep the editor usable instead of
+                // treating one small image request as a full font-pack error.
+                console.warn("Some initial atlas glyphs used font fallback.");
               }
               resolve(true);
             }, reject);
@@ -3480,6 +3486,19 @@
     };
   }
 
+  function availableTitleFontFamily(family) {
+    if (!styleEngine || styleEngine.isReady() || initialFontLoadingError) {
+      return family;
+    }
+    // The atlas is the normal title renderer. While its index is still loading,
+    // avoid making Canvas start multi-megabyte fallback font downloads that may
+    // never be needed. If the atlas itself fails, the original family is used.
+    return String(family).replace(
+      /"Logo(?:DesignedCN|SkeletonCN|HandCN|HandEN)"\s*,?\s*/g,
+      ""
+    );
+  }
+
   function makeGlyphLayout(ctx, text, fontSize, options) {
     var chars = splitGraphemes(text);
     var config = getFontConfig(options.style, text);
@@ -3509,7 +3528,12 @@
       ? visibleIndexes[visibleIndexes.length - 1]
       : -1;
 
-    ctx.font = config.weight + " " + fontSize + "px " + config.family;
+    ctx.font =
+      config.weight +
+      " " +
+      fontSize +
+      "px " +
+      availableTitleFontFamily(config.family);
     ctx.textBaseline = "alphabetic";
 
     var glyphs = chars.map(function (char, index) {
@@ -4048,7 +4072,11 @@
     }
 
     ctx.font =
-      line.config.weight + " " + line.fontSize + "px " + line.config.family;
+      line.config.weight +
+      " " +
+      line.fontSize +
+      "px " +
+      availableTitleFontFamily(line.config.family);
     ctx.textBaseline = "alphabetic";
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
@@ -4079,8 +4107,16 @@
             solidColor: titleInk
           })
         : false;
+      var atlasState =
+        useVector &&
+        glyph.fontKey &&
+        glyph.fontKey.indexOf("atlas:") === 0 &&
+        styleEngine.atlasGlyphState
+          ? styleEngine.atlasGlyphState(glyph.fontKey)
+          : "unavailable";
+      var waitingForAtlas = atlasState === "idle" || atlasState === "loading";
 
-      if (!vectorDrawn) {
+      if (!vectorDrawn && !waitingForAtlas) {
         if (!shadowPass && state.outline) {
           ctx.strokeStyle = rgba(outlineColor, 0.95);
           ctx.lineWidth = Math.max(2.1, line.fontSize * 0.014);
@@ -5657,6 +5693,39 @@
     );
   }
 
+  function isEmbeddedMobileBrowser() {
+    var userAgent = navigator.userAgent || "";
+    return /MicroMessenger|MQQBrowser|QQ\/|TBS\/|Weibo|AlipayClient|DingTalk/i.test(
+      userAgent
+    );
+  }
+
+  function updateBrowserCompatibilityTip() {
+    if (!elements.welcomeBrowserTip || !isEmbeddedMobileBrowser()) {
+      return;
+    }
+    elements.welcomeBrowserTip.innerHTML =
+      '<span aria-hidden="true">i</span>当前为应用内置浏览器；若资源或保存异常，请从右上角使用系统浏览器打开～';
+  }
+
+  function compatibleImageExportScale(dimensions, requestedScale) {
+    var scale = clamp(Math.round(Number(requestedScale) || 1), 1, 3);
+    var constrainedBrowser = isEmbeddedMobileBrowser();
+    if (!constrainedBrowser) {
+      return scale;
+    }
+
+    var maxDimension = Math.max(dimensions.width, dimensions.height);
+    var pixelCount = dimensions.width * dimensions.height;
+    while (
+      scale > 1 &&
+      (maxDimension * scale > 4096 || pixelCount * scale * scale > 12000000)
+    ) {
+      scale -= 1;
+    }
+    return scale;
+  }
+
   function createArtworkFile(blob, filename) {
     if (typeof File !== "function") {
       return null;
@@ -5685,9 +5754,12 @@
   function releasePendingSave(revokeDelay) {
     var objectUrl = pendingSaveObjectUrl;
     pendingSaveFile = null;
+    pendingSaveBlob = null;
     pendingSaveFilename = "";
     pendingSaveObjectUrl = "";
+    pendingSaveDataUrl = "";
     pendingSaveDimensions = "";
+    pendingSaveGeneration += 1;
     if (objectUrl) {
       window.setTimeout(function () {
         URL.revokeObjectURL(objectUrl);
@@ -5704,6 +5776,9 @@
     elements.saveImagePreview.hidden = true;
     elements.savedImagePreview.removeAttribute("src");
     elements.systemSaveButton.disabled = false;
+    elements.openSavedImageButton.disabled = false;
+    elements.openSavedImageButton.innerHTML =
+      '<span aria-hidden="true">▣</span>打开原图后长按保存';
     releasePendingSave(120000);
     if (saveAssistReturnFocus && saveAssistReturnFocus.focus) {
       saveAssistReturnFocus.focus();
@@ -5715,6 +5790,8 @@
     if (pendingSaveObjectUrl) {
       releasePendingSave(120000);
     }
+    pendingSaveGeneration += 1;
+    pendingSaveBlob = blob;
     pendingSaveFilename = filename;
     pendingSaveFile = createArtworkFile(blob, filename);
     pendingSaveObjectUrl = URL.createObjectURL(blob);
@@ -5726,6 +5803,10 @@
     elements.saveAssistDescription.textContent = gifFile
       ? "这个浏览器可能不会自动保存 GIF，请选择一种可靠的保存方式。"
       : "这个浏览器可能不会自动保存文件，请选择一种可靠的保存方式。";
+    if (isEmbeddedMobileBrowser()) {
+      elements.saveAssistDescription.textContent =
+        "当前为应用内置浏览器。若长按没有保存选项，请在右上角选择用系统浏览器打开。";
+    }
     elements.savedImagePreview.alt = gifFile
       ? "刚刚生成的动态 GIF 作品"
       : "刚刚生成的高清字标作品";
@@ -5735,6 +5816,9 @@
     elements.savedImagePreview.removeAttribute("src");
     elements.systemSaveButton.hidden = !canShareArtworkFile(pendingSaveFile);
     elements.systemSaveButton.disabled = false;
+    elements.openSavedImageButton.disabled = false;
+    elements.openSavedImageButton.innerHTML =
+      '<span aria-hidden="true">▣</span>打开原图后长按保存';
     elements.saveAssist.hidden = false;
     window.requestAnimationFrame(function () {
       var firstAction = elements.systemSaveButton.hidden
@@ -5795,13 +5879,51 @@
       closeSaveAssist();
       return;
     }
-    elements.savedImagePreview.src = pendingSaveObjectUrl;
-    elements.saveAssistCard.hidden = true;
-    elements.saveImagePreview.hidden = false;
-    elements.renderStatus.textContent =
-      "请长按原图保存 · " + pendingSaveDimensions;
-    elements.closeSavedImageButton.focus();
-    showToast("长按原图即可保存到相册");
+    var generation = pendingSaveGeneration;
+    var previewPromise = Promise.resolve(pendingSaveObjectUrl);
+    if (
+      isEmbeddedMobileBrowser() &&
+      pendingSaveBlob &&
+      typeof FileReader === "function"
+    ) {
+      if (pendingSaveDataUrl) {
+        previewPromise = Promise.resolve(pendingSaveDataUrl);
+      } else {
+        elements.openSavedImageButton.disabled = true;
+        elements.openSavedImageButton.textContent = "正在准备兼容原图…";
+        previewPromise = new Promise(function (resolve) {
+          var reader = new FileReader();
+          reader.onload = function () {
+            resolve(typeof reader.result === "string" ? reader.result : "");
+          };
+          reader.onerror = function () {
+            resolve("");
+          };
+          reader.readAsDataURL(pendingSaveBlob);
+        }).then(function (dataUrl) {
+          if (generation === pendingSaveGeneration && dataUrl) {
+            pendingSaveDataUrl = dataUrl;
+          }
+          return dataUrl || pendingSaveObjectUrl;
+        });
+      }
+    }
+
+    previewPromise.then(function (previewUrl) {
+      elements.openSavedImageButton.disabled = false;
+      elements.openSavedImageButton.innerHTML =
+        '<span aria-hidden="true">▣</span>打开原图后长按保存';
+      if (generation !== pendingSaveGeneration || !previewUrl) {
+        return;
+      }
+      elements.savedImagePreview.src = previewUrl;
+      elements.saveAssistCard.hidden = true;
+      elements.saveImagePreview.hidden = false;
+      elements.renderStatus.textContent =
+        "请长按原图保存 · " + pendingSaveDimensions;
+      elements.closeSavedImageButton.focus();
+      showToast("长按原图即可保存到相册");
+    });
   }
 
   function startDirectDownload(blob, filename) {
@@ -5832,17 +5954,15 @@
   }
 
   function waitForArtworkResources() {
-    var ready;
-    if (logoFontsReady || vectorEngineReady) {
-      ready = Promise.all([
-        logoFontsReady || Promise.resolve(),
-        vectorEngineReady || Promise.resolve()
-      ]);
-    } else if (document.fonts && document.fonts.ready) {
-      ready = document.fonts.ready;
-    } else {
-      ready = Promise.resolve();
-    }
+    var browserFontsReady =
+      document.fonts && document.fonts.ready
+        ? document.fonts.ready
+        : Promise.resolve();
+    var ready = Promise.all([
+      logoFontsReady || Promise.resolve(),
+      vectorEngineReady || Promise.resolve(),
+      browserFontsReady
+    ]);
     return Promise.resolve(ready).then(function () {
       if (styleEngine && styleEngine.whenAtlasReady) {
         // Start requests for glyphs entered immediately before export.
@@ -6138,6 +6258,123 @@
       });
   }
 
+  function releaseExportCanvas(canvas) {
+    if (!canvas) {
+      return;
+    }
+    // Mobile WebViews can retain detached canvas backing stores for a while.
+    // Shrinking it explicitly releases the large RGBA buffer after encoding.
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+
+  function createExportError(code, message) {
+    var error = new Error(message || code);
+    error.code = code;
+    return error;
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    var parts = String(dataUrl || "").split(",");
+    if (parts.length < 2 || typeof atob !== "function") {
+      throw createExportError(
+        "PNG_ENCODING_UNSUPPORTED",
+        "This browser cannot encode PNG files"
+      );
+    }
+    var mimeMatch = parts[0].match(/^data:([^;]+)/);
+    var binary = atob(parts[1]);
+    var bytes = new Uint8Array(binary.length);
+    for (var index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new Blob([bytes], {
+      type: mimeMatch ? mimeMatch[1] : "image/png"
+    });
+  }
+
+  function renderPngAtScale(scale) {
+    return new Promise(function (resolve, reject) {
+      var exportCanvas = document.createElement("canvas");
+      var result;
+      try {
+        result = renderArtwork(exportCanvas, scale);
+      } catch (error) {
+        releaseExportCanvas(exportCanvas);
+        reject(
+          createExportError(
+            "CANVAS_ALLOCATION_FAILED",
+            error && error.message ? error.message : "Canvas allocation failed"
+          )
+        );
+        return;
+      }
+
+      function complete(blob) {
+        releaseExportCanvas(exportCanvas);
+        if (!blob) {
+          reject(
+            createExportError(
+              "PNG_ENCODING_FAILED",
+              "The browser returned an empty PNG"
+            )
+          );
+          return;
+        }
+        resolve({
+          blob: blob,
+          width: result.width * scale,
+          height: result.height * scale,
+          scale: scale
+        });
+      }
+
+      if (typeof exportCanvas.toBlob === "function") {
+        try {
+          exportCanvas.toBlob(complete, "image/png", 1);
+        } catch (error) {
+          releaseExportCanvas(exportCanvas);
+          reject(
+            createExportError(
+              "PNG_ENCODING_FAILED",
+              error && error.message ? error.message : "PNG encoding failed"
+            )
+          );
+        }
+        return;
+      }
+
+      try {
+        complete(dataUrlToBlob(exportCanvas.toDataURL("image/png")));
+      } catch (error) {
+        releaseExportCanvas(exportCanvas);
+        reject(error);
+      }
+    });
+  }
+
+  function renderPngWithFallback(startScale) {
+    function attempt(scale) {
+      return renderPngAtScale(scale).catch(function (error) {
+        if (scale <= 1) {
+          throw error;
+        }
+        console.warn(
+          "PNG export failed; retrying at a safer scale:",
+          error
+        );
+        setDownloadProgress("自动兼容重试…");
+        elements.renderStatus.textContent =
+          "当前浏览器内存不足，正在自动降低一档重试…";
+        return afterBrowserPaint().then(function () {
+          return attempt(scale - 1);
+        });
+      });
+    }
+
+    return attempt(startScale);
+  }
+
   function downloadArtwork() {
     if (elements.downloadButton.classList.contains("loading")) {
       return;
@@ -6149,40 +6386,42 @@
     elements.renderStatus.textContent = "正在准备高清作品…";
 
     var begin = function () {
-      try {
-        var exportCanvas = document.createElement("canvas");
-        var result = renderArtwork(exportCanvas, state.exportScale);
-        exportCanvas.toBlob(
-          function (blob) {
-            if (!blob) {
-              setDownloadLoading(false);
-              elements.renderStatus.textContent = "保存失败，请降低清晰度重试";
-              showToast("保存失败，请重试");
-              return;
-            }
-            try {
-              var filename =
-                safeFilename(state.line1 || state.line2) + "-字标.png";
-              var dimensions =
-                result.width * state.exportScale +
-                " × " +
-                result.height * state.exportScale;
-              deliverArtwork(blob, filename, dimensions);
-            } catch (error) {
-              console.warn("Unable to prepare artwork download.", error);
-              setDownloadLoading(false);
-              elements.renderStatus.textContent = "保存失败，请重试";
-              showToast("保存失败，请重试");
-            }
-          },
-          "image/png",
-          1
-        );
-      } catch (error) {
-        setDownloadLoading(false);
-        elements.renderStatus.textContent = "尺寸太大，请降低清晰度重试";
-        showToast("尺寸太大，请选择较低清晰度");
+      var dimensions = dimensionsFromValue(state.canvasSize);
+      var requestedScale = state.exportScale;
+      var startScale = compatibleImageExportScale(
+        dimensions,
+        requestedScale
+      );
+      if (startScale < requestedScale) {
+        setDownloadProgress("兼容模式生成中…");
+        elements.renderStatus.textContent =
+          "当前浏览器将使用 " + startScale + "× 安全尺寸保存…";
       }
+
+      renderPngWithFallback(startScale)
+        .then(function (result) {
+          var filename =
+            safeFilename(state.line1 || state.line2) + "-字标.png";
+          var dimensionLabel = result.width + " × " + result.height;
+          var downgraded = result.scale < requestedScale;
+          if (downgraded) {
+            dimensionLabel += " · 自动兼容 " + result.scale + "×";
+          }
+          deliverArtwork(result.blob, filename, dimensionLabel);
+          if (downgraded) {
+            showToast(
+              "当前浏览器已自动使用 " + result.scale + "× 完成保存"
+            );
+          }
+        })
+        .catch(function (error) {
+          console.warn("Unable to export PNG artwork.", error);
+          var code = (error && error.code) || "PNG_EXPORT_FAILED";
+          setDownloadLoading(false);
+          elements.renderStatus.textContent =
+            "保存失败，请切换系统浏览器 · " + code;
+          showToast("保存失败（" + code + "）");
+        });
     };
 
     waitForArtworkResources().then(begin, function (error) {
@@ -7034,6 +7273,14 @@
   });
 
   window.addEventListener("lettering-atlas-glyph-ready", scheduleRender);
+  window.addEventListener("lettering-atlas-glyph-failed", function () {
+    // The next render starts only the browser fallback font needed for the
+    // affected glyph. Re-render once that font finishes loading.
+    scheduleRender();
+    if (document.fonts && document.fonts.ready) {
+      Promise.resolve(document.fonts.ready).then(scheduleRender, function () {});
+    }
+  });
 
   if ("scrollRestoration" in window.history) {
     window.history.scrollRestoration = "manual";
@@ -7044,20 +7291,19 @@
   renderPreviewSafely();
   initializeHistory();
   restoreCachedOverlay();
+  updateBrowserCompatibilityTip();
   openWelcomeDialog();
 
   if (styleEngine) {
     vectorEngineReady = Promise.resolve()
       .then(function () {
-        return styleEngine.init({
-          longcang: "./assets/fonts/LongCang-Regular.ttf",
-          qingke: "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
-          kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
-          kalam: "./assets/fonts/Kalam-Bold.ttf",
-          princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-        }, "./assets/font-atlas/runtime-glyph-index.json?v=5", function (progress) {
-          setFontLoadingProgress(progress * 92);
-        });
+        return styleEngine.init(
+          {},
+          "./assets/font-atlas/runtime-glyph-index.json?v=5",
+          function (progress) {
+            setFontLoadingProgress(progress * 92);
+          }
+        );
       })
       .then(function () {
         scheduleRender();
@@ -7071,48 +7317,20 @@
     vectorEngineReady = Promise.resolve(null);
     showFontLoadingError(new Error("Lettering style engine is unavailable"));
   }
-  if (document.fonts && document.fonts.load) {
-    logoFontsReady = Promise.all([
-      document.fonts.load(
-        '400 120px "LogoDesignedCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 120px "LogoSkeletonCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 120px "LogoHandCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 90px "LogoScriptEN"',
-        "Till We All Turn into Little Piggies"
-      ),
-      document.fonts.load(
-        '700 120px "LogoHandEN"',
-        "STAY CURIOUS KEEP CREATING"
-      )
-    ])
-      .then(function (loadedFonts) {
-        scheduleRender();
-        return loadedFonts;
-      })
-      .catch(function (error) {
-        console.warn("Canvas lettering fonts unavailable.", error);
-        showFontLoadingError(error);
-        return null;
-      });
-  } else if (document.fonts && document.fonts.ready) {
-    logoFontsReady = document.fonts.ready
+  if (document.fonts && document.fonts.ready) {
+    logoFontsReady = Promise.resolve(document.fonts.ready)
       .then(function () {
         scheduleRender();
       })
       .catch(function (error) {
-        console.warn("Canvas lettering fonts unavailable.", error);
-        showFontLoadingError(error);
+        console.warn("A browser fallback font did not finish loading.", error);
         return null;
       });
+    if (document.fonts.addEventListener) {
+      document.fonts.addEventListener("loadingdone", scheduleRender);
+    }
+  } else {
+    logoFontsReady = Promise.resolve(null);
   }
   finishInitialFontLoading();
 })();

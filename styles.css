@@ -75,7 +75,7 @@ body {
   background: #edf0f1;
   font-family:
     Inter, "SF Pro Display", "Segoe UI", "Microsoft YaHei UI", "PingFang SC",
-    "LogoHandCN", "LogoSkeletonCN", sans-serif;
+    sans-serif;
 }
 
 body::before {

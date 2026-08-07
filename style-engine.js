@@ -5,8 +5,10 @@
   var atlasGlyphs = Object.create(null);
   var atlasImages = Object.create(null);
   var atlasLoading = Object.create(null);
+  var atlasFailures = Object.create(null);
   var tintCache = Object.create(null);
   var cacheRefreshToken = "";
+  var resourceRetryDelays = [0, 700, 1800];
 
   try {
     cacheRefreshToken = new URLSearchParams(global.location.search).get(
@@ -16,13 +18,18 @@
     cacheRefreshToken = "";
   }
 
-  function freshResourceUrl(url) {
-    if (!cacheRefreshToken) {
+  function freshResourceUrl(url, retryAttempt) {
+    if (!cacheRefreshToken && !retryAttempt) {
       return url;
     }
     try {
       var freshUrl = new URL(url, global.document.baseURI);
-      freshUrl.searchParams.set("cache-refresh", cacheRefreshToken);
+      if (cacheRefreshToken) {
+        freshUrl.searchParams.set("cache-refresh", cacheRefreshToken);
+      }
+      if (retryAttempt) {
+        freshUrl.searchParams.set("resource-retry", String(retryAttempt));
+      }
       return freshUrl.href;
     } catch (error) {
       return url;
@@ -97,8 +104,19 @@
     };
   }
 
-  function loadArrayBuffer(url, errorPrefix, onProgress) {
-    var resourceUrl = freshResourceUrl(url);
+  function wait(delay) {
+    return new Promise(function (resolve) {
+      global.setTimeout(resolve, delay);
+    });
+  }
+
+  function loadArrayBufferAttempt(
+    url,
+    errorPrefix,
+    onProgress,
+    retryAttempt
+  ) {
+    var resourceUrl = freshResourceUrl(url, retryAttempt);
     if (typeof global.fetch !== "function") {
       return new Promise(function (resolve, reject) {
         if (typeof global.XMLHttpRequest !== "function") {
@@ -182,6 +200,33 @@
     });
   }
 
+  function loadArrayBuffer(url, errorPrefix, onProgress) {
+    var retryAttempt = 0;
+
+    function attempt() {
+      return loadArrayBufferAttempt(
+        url,
+        errorPrefix,
+        onProgress,
+        retryAttempt
+      ).catch(function (error) {
+        if (retryAttempt >= resourceRetryDelays.length - 1) {
+          throw error;
+        }
+        retryAttempt += 1;
+        console.warn(
+          "Retrying lettering resource:",
+          url,
+          "attempt",
+          retryAttempt + 1
+        );
+        return wait(resourceRetryDelays[retryAttempt]).then(attempt);
+      });
+    }
+
+    return attempt();
+  }
+
   function loadFont(key, url, onProgress) {
     return loadArrayBuffer(url, "Unable to load font: ", onProgress).then(
       function (buffer) {
@@ -235,12 +280,12 @@
       }
       return readyPromise;
     }
-    if (!global.opentype) {
+    var fontKeys = Object.keys(manifest);
+    if (fontKeys.length && !global.opentype) {
       readyPromise = Promise.reject(new Error("opentype.js is not available"));
       return readyPromise;
     }
 
-    var fontKeys = Object.keys(manifest);
     var resourceIds = fontKeys.map(function (key) {
       return "font:" + key;
     });
@@ -251,6 +296,12 @@
     var fontPromises = fontKeys.map(function (key) {
       return loadFont(key, manifest[key], function (loaded, total, complete) {
         report("font:" + key, loaded, total, complete);
+      }).catch(function (error) {
+        // The runtime atlas is the primary lettering source. A missing fallback
+        // font must not make every generated glyph unavailable.
+        report("font:" + key, 0, 0, true);
+        console.warn("Optional lettering font unavailable:", key, error);
+        return null;
       });
     });
     if (atlasUrl) {
@@ -755,25 +806,47 @@
     if (atlasImages[key]) {
       return atlasImages[key];
     }
+    if (atlasFailures[key]) {
+      return null;
+    }
     if (atlasLoading[key]) {
       return null;
     }
     atlasLoading[key] = new Promise(function (resolve) {
-      var image = new Image();
-      image.onload = function () {
-        atlasImages[key] = image;
-        delete atlasLoading[key];
+      function dispatch(name) {
         if (typeof global.dispatchEvent === "function") {
-          global.dispatchEvent(new Event("lettering-atlas-glyph-ready"));
+          global.dispatchEvent(new Event(name));
         }
-        resolve(image);
-      };
-      image.onerror = function () {
-        delete atlasLoading[key];
-        console.warn("Unable to load atlas glyph:", key);
-        resolve(null);
-      };
-      image.src = freshResourceUrl(key);
+      }
+
+      function loadAttempt(retryAttempt) {
+        var image = new Image();
+        image.decoding = "async";
+        image.onload = function () {
+          atlasImages[key] = image;
+          delete atlasFailures[key];
+          delete atlasLoading[key];
+          dispatch("lettering-atlas-glyph-ready");
+          resolve(image);
+        };
+        image.onerror = function () {
+          if (retryAttempt < resourceRetryDelays.length - 1) {
+            var nextAttempt = retryAttempt + 1;
+            global.setTimeout(function () {
+              loadAttempt(nextAttempt);
+            }, resourceRetryDelays[nextAttempt]);
+            return;
+          }
+          atlasFailures[key] = true;
+          delete atlasLoading[key];
+          console.warn("Unable to load atlas glyph after retries:", key);
+          dispatch("lettering-atlas-glyph-failed");
+          resolve(null);
+        };
+        image.src = freshResourceUrl(key, retryAttempt);
+      }
+
+      loadAttempt(0);
     });
     return null;
   }
@@ -857,6 +930,21 @@
     return entry && entry.variants ? entry.variants[0] : null;
   }
 
+  function atlasGlyphState(fontKey) {
+    var selection = atlasSelection(fontKey);
+    if (!selection) {
+      return "unavailable";
+    }
+    var key = selection.meta.file;
+    if (atlasImages[key]) {
+      return "ready";
+    }
+    if (atlasFailures[key]) {
+      return "failed";
+    }
+    return atlasLoading[key] ? "loading" : "idle";
+  }
+
   var api = {
     init: init,
     isReady: function () {
@@ -867,6 +955,7 @@
     measureGlyph: measureGlyph,
     drawGlyph: drawGlyph,
     getAtlasMeta: getAtlasMeta,
+    atlasGlyphState: atlasGlyphState,
     whenAtlasReady: whenAtlasReady
   };
 

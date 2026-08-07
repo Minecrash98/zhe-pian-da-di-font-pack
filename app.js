@@ -6420,7 +6420,7 @@
 
   function cacheRefreshUrls() {
     var urls = [
-      "./assets/font-atlas/runtime-glyph-index.json?v=5",
+      "./assets/font-atlas/runtime-glyph-index.json?v=6",
       "./assets/fonts/LongCang-Regular.ttf",
       "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
       "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
@@ -8224,7 +8224,7 @@
       .then(function () {
         return styleEngine.init(
           {},
-          "./assets/font-atlas/runtime-glyph-index.json?v=5",
+          "./assets/font-atlas/runtime-glyph-index.json?v=6",
           function (progress) {
             setFontLoadingProgress(progress * 92);
           }

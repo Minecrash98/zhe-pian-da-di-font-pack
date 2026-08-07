@@ -2304,6 +2304,10 @@ details[open] > .precision-summary .precision-chevron {
   font-weight: 800;
 }
 
+.save-image-preview-toolbar > span {
+  min-width: 0;
+}
+
 .save-image-preview-toolbar i {
   margin-right: 4px;
   color: var(--yellow);
@@ -2324,8 +2328,8 @@ details[open] > .precision-summary .precision-chevron {
 .save-image-preview img {
   display: block;
   max-width: 100%;
-  max-height: calc(100vh - 102px);
-  max-height: calc(100dvh - 102px);
+  max-height: calc(100vh - 190px);
+  max-height: calc(100dvh - 190px);
   border: 5px solid rgba(255, 255, 255, 0.94);
   border-radius: 16px;
   background:
@@ -2340,6 +2344,66 @@ details[open] > .precision-summary .precision-chevron {
   object-fit: contain;
   -webkit-touch-callout: default;
   user-select: auto;
+}
+
+.save-image-preview-help {
+  display: grid;
+  width: min(560px, 100%);
+  gap: 7px;
+  padding: 9px 10px 10px;
+  border: 1px solid rgba(255, 255, 255, 0.3);
+  border-radius: 14px;
+  color: #fff;
+  background: rgba(23, 35, 45, 0.9);
+  box-shadow: 0 12px 34px rgba(8, 25, 31, 0.24);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+}
+
+.save-image-preview-help p {
+  margin: 0;
+  color: rgba(255, 255, 255, 0.82);
+  font-size: 9px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.save-image-preview-actions {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 7px;
+}
+
+.save-image-preview-actions button {
+  display: flex;
+  gap: 7px;
+  min-height: 37px;
+  padding: 0 12px;
+  align-items: center;
+  justify-content: center;
+  border: 0;
+  border-radius: 10px;
+  font-size: 9px;
+  font-weight: 900;
+}
+
+.save-image-preview-actions button[hidden] {
+  display: none;
+}
+
+#previewSystemSaveButton {
+  color: #fff;
+  background: var(--blue);
+}
+
+#downloadSavedImageButton {
+  color: #17232d;
+  background: var(--yellow);
+}
+
+.save-image-preview-actions button:disabled {
+  cursor: wait;
+  opacity: 0.66;
 }
 
 @keyframes save-assist-enter {
@@ -2831,10 +2895,24 @@ details[open] > .precision-summary .precision-chevron {
   }
 
   .save-image-preview img {
-    max-height: calc(100vh - 92px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
-    max-height: calc(100dvh - 92px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100vh - 180px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
+    max-height: calc(100dvh - 180px - env(safe-area-inset-top, 0px) - env(safe-area-inset-bottom, 0px));
     border-width: 3px;
     border-radius: 12px;
+  }
+
+  .save-image-preview-help {
+    width: 100%;
+    padding: 8px;
+  }
+
+  .save-image-preview-help p {
+    font-size: 8px;
+  }
+
+  .save-image-preview-actions button {
+    min-height: 36px;
+    font-size: 9px;
   }
 }
 

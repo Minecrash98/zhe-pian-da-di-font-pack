@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=31" />
+    <link rel="stylesheet" href="./styles.css?v=32" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -1177,6 +1177,14 @@
             <span aria-hidden="true">▣</span>
             打开原图后长按保存
           </button>
+          <button
+            class="save-assist-secondary"
+            id="saveAssistDownloadButton"
+            type="button"
+          >
+            <span aria-hidden="true">↓</span>
+            直接下载原图文件
+          </button>
         </div>
         <small>不会清除或上传你添加到画布中的本地图片。</small>
       </section>
@@ -1190,10 +1198,25 @@
         hidden
       >
         <div class="save-image-preview-toolbar">
-          <span><i aria-hidden="true">✦</i> 长按下方原图，选择保存到相册</span>
+          <span id="saveImagePreviewStatus"><i aria-hidden="true">✦</i> 正在准备兼容原图…</span>
           <button id="closeSavedImageButton" type="button">完成</button>
         </div>
         <img id="savedImagePreview" alt="刚刚生成的高清字标作品" />
+        <div class="save-image-preview-help">
+          <p id="saveImagePreviewHint">
+            若浏览器提示“保存失败”，请改用下面的系统保存或文件下载。
+          </p>
+          <div class="save-image-preview-actions">
+            <button id="previewSystemSaveButton" type="button" hidden>
+              <span aria-hidden="true">↥</span>
+              系统保存 / 分享
+            </button>
+            <button id="downloadSavedImageButton" type="button">
+              <span aria-hidden="true">↓</span>
+              下载原图文件
+            </button>
+          </div>
+        </div>
       </section>
     </div>
 
@@ -1206,7 +1229,7 @@
     <script src="./style-engine.js?v=7"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
     <script src="./assets/vendor/gifuct.min.js?v=1"></script>
-    <script src="./app.js?v=39"></script>
+    <script src="./app.js?v=40"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

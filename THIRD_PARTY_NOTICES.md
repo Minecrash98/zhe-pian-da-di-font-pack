@@ -33,6 +33,7 @@
 
 - opentype.js — MIT License，完整许可文本见 `assets/vendor/LICENSE-opentype.txt`
 - gifenc — MIT License，完整许可文本见 `assets/vendor/gifenc.LICENSE.md`
+- gifuct-js 与 js-binary-schema-parser — MIT License，用于实验性本地 GIF 解码，完整许可文本见 `assets/vendor/gifuct-js.LICENSE.txt`
 
 ## 商标与非官方声明
 

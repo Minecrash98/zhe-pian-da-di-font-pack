@@ -35,10 +35,35 @@
     overlayLayer: "background",
     overlayLocked: false,
     gifQuality: "balanced",
+    glyphAdjustments: {},
     seed: 147
   };
 
-  var state = Object.assign({}, defaults);
+  function cloneGlyphAdjustments(source) {
+    var clone = {};
+    Object.keys(source || {}).forEach(function (lineId) {
+      clone[lineId] = {};
+      Object.keys(source[lineId] || {}).forEach(function (glyphIndex) {
+        clone[lineId][glyphIndex] = Object.assign(
+          {},
+          source[lineId][glyphIndex]
+        );
+      });
+    });
+    return clone;
+  }
+
+  function createState(overrides) {
+    var next = Object.assign({}, defaults, overrides || {});
+    next.glyphAdjustments = cloneGlyphAdjustments(
+      overrides && overrides.glyphAdjustments
+        ? overrides.glyphAdjustments
+        : defaults.glyphAdjustments
+    );
+    return next;
+  }
+
+  var state = createState();
   var renderFrame = 0;
   var toastTimer = 0;
   var textLayoutCache = Object.create(null);
@@ -50,6 +75,17 @@
   var officialAssetCategory = "characters";
   var gifPreviewTimer = 0;
   var gifFrameCache = Object.create(null);
+  var gifDecoder = window.GifuctJS || null;
+  var localGifLimits = {
+    maxBytes: 15 * 1024 * 1024,
+    maxFrames: 60,
+    maxSourcePixels: 6000000,
+    maxSourceSide: 3200,
+    mobileSourcePixels: 3000000,
+    mobileSourceSide: 2400,
+    desktopFramePixels: 18000000,
+    mobileFramePixels: 10000000
+  };
   var angelinaAssets = window.ANGELINA_ASSETS || {
     characters: [],
     decorations: []
@@ -224,12 +260,16 @@
   var localAssetDbPromise = null;
   var fontLoadingPercent = 0;
   var fontLoadingHideTimer = 0;
+  var localUploadStatusTimer = 0;
   var initialFontLoadingError = null;
   var cacheRefreshInProgress = false;
   var pendingSaveFile = null;
+  var pendingSaveBlob = null;
   var pendingSaveFilename = "";
   var pendingSaveObjectUrl = "";
+  var pendingSaveDataUrl = "";
   var pendingSaveDimensions = "";
+  var pendingSaveGeneration = 0;
   var saveAssistReturnFocus = null;
   var activeEditorSection = "text";
   var stackedEditorQuery = window.matchMedia("(max-width: 900px)");
@@ -240,8 +280,11 @@
   var historyTimer = 0;
   var historySuspended = false;
   var aboutReturnFocus = null;
+  var welcomeCloseTimer = 0;
+  var activeGlyphTarget = null;
 
   var elements = {
+    appShell: document.querySelector(".app-shell"),
     workspace: document.querySelector(".workspace"),
     editorSectionNav: document.getElementById("editorSectionNav"),
     editorSectionTabs: document.querySelectorAll("[data-editor-tab]"),
@@ -328,6 +371,25 @@
     line1Count: document.getElementById("line1Count"),
     line2Count: document.getElementById("line2Count"),
     subtitleCount: document.getElementById("subtitleCount"),
+    glyphFineTuneCard: document.getElementById("glyphFineTuneCard"),
+    glyphFineTuneEmpty: document.getElementById("glyphFineTuneEmpty"),
+    glyphFineTuneEditor: document.getElementById("glyphFineTuneEditor"),
+    glyphTargetCharacter: document.getElementById("glyphTargetCharacter"),
+    glyphTargetLabel: document.getElementById("glyphTargetLabel"),
+    glyphTargetHint: document.getElementById("glyphTargetHint"),
+    glyphTargetProgress: document.getElementById("glyphTargetProgress"),
+    previousGlyphButton: document.getElementById("previousGlyphButton"),
+    nextGlyphButton: document.getElementById("nextGlyphButton"),
+    glyphResetButton: document.getElementById("glyphResetButton"),
+    glyphResetAllButton: document.getElementById("glyphResetAllButton"),
+    glyphScale: document.getElementById("glyphScale"),
+    glyphScaleValue: document.getElementById("glyphScaleValue"),
+    glyphOffsetX: document.getElementById("glyphOffsetX"),
+    glyphOffsetXValue: document.getElementById("glyphOffsetXValue"),
+    glyphOffsetY: document.getElementById("glyphOffsetY"),
+    glyphOffsetYValue: document.getElementById("glyphOffsetYValue"),
+    glyphRotation: document.getElementById("glyphRotation"),
+    glyphRotationValue: document.getElementById("glyphRotationValue"),
     advancedLayerMode: document.getElementById("advancedLayerMode"),
     layerModeDescription: document.getElementById("layerModeDescription"),
     layerModeStatus: document.getElementById("layerModeStatus"),
@@ -401,6 +463,7 @@
     officialAssetsHint: document.getElementById("officialAssetsHint"),
     officialAssetGrid: document.getElementById("officialAssetGrid"),
     customUploadBlock: document.getElementById("customUploadBlock"),
+    localUploadStatus: document.getElementById("localUploadStatus"),
     overlayHint: document.getElementById("overlayHint"),
     overlayControls: document.getElementById("overlayControls"),
     overlayFileCard: document.getElementById("overlayFileCard"),
@@ -444,6 +507,9 @@
     aboutDialog: document.getElementById("aboutDialog"),
     aboutBackdrop: document.getElementById("aboutBackdrop"),
     aboutCloseButton: document.getElementById("aboutCloseButton"),
+    welcomeDialog: document.getElementById("welcomeDialog"),
+    welcomeStartButton: document.getElementById("welcomeStartButton"),
+    welcomeBrowserTip: document.getElementById("welcomeBrowserTip"),
     resetButton: document.getElementById("resetButton"),
     saveAssist: document.getElementById("saveAssist"),
     saveAssistCard: document.getElementById("saveAssistCard"),
@@ -502,6 +568,294 @@
     return splitGraphemes(text).length;
   }
 
+  var neutralGlyphAdjustment = {
+    char: "",
+    x: 0,
+    y: 0,
+    scale: 100,
+    rotation: 0
+  };
+
+  function normalizedGlyphAdjustment(value, character) {
+    value = value || neutralGlyphAdjustment;
+    return {
+      char: character || value.char || "",
+      x: clamp(Number(value.x) || 0, -150, 150),
+      y: clamp(Number(value.y) || 0, -150, 150),
+      scale: clamp(Number(value.scale) || 100, 30, 250),
+      rotation: clamp(Number(value.rotation) || 0, -180, 180)
+    };
+  }
+
+  function glyphAdjustmentIsNeutral(value) {
+    return Boolean(
+      value &&
+        Number(value.x) === 0 &&
+        Number(value.y) === 0 &&
+        Number(value.scale) === 100 &&
+        Number(value.rotation) === 0
+    );
+  }
+
+  function glyphAdjustmentFor(lineId, glyphIndex, character) {
+    var lineAdjustments =
+      state.glyphAdjustments && state.glyphAdjustments[lineId];
+    var stored = lineAdjustments && lineAdjustments[String(glyphIndex)];
+    if (!stored || stored.char !== character) {
+      return normalizedGlyphAdjustment(null, character);
+    }
+    return normalizedGlyphAdjustment(stored, character);
+  }
+
+  function glyphEditorItems() {
+    var items = [];
+    textLayerDefinitions.forEach(function (definition) {
+      if (state.advancedLayerMode && !getLayer(definition.id)) {
+        return;
+      }
+      var characters = splitGraphemes(state[definition.textKey] || "");
+      var visibleCharacters = characters.filter(function (character) {
+        return Boolean(character.trim());
+      });
+      var visibleIndex = 0;
+      characters.forEach(function (character, glyphIndex) {
+        if (!character.trim()) {
+          return;
+        }
+        visibleIndex += 1;
+        items.push({
+          lineId: definition.id,
+          lineName: definition.name,
+          textKey: definition.textKey,
+          char: character,
+          glyphIndex: glyphIndex,
+          linePosition: visibleIndex,
+          lineCount: visibleCharacters.length
+        });
+      });
+    });
+    return items;
+  }
+
+  function resolveActiveGlyphTarget(items) {
+    items = items || glyphEditorItems();
+    if (!items.length) {
+      activeGlyphTarget = null;
+      return { items: items, item: null, index: -1 };
+    }
+
+    var activeIndex = -1;
+    if (activeGlyphTarget) {
+      activeIndex = items.findIndex(function (item) {
+        return (
+          item.lineId === activeGlyphTarget.lineId &&
+          item.glyphIndex === activeGlyphTarget.glyphIndex &&
+          item.char === activeGlyphTarget.char
+        );
+      });
+      if (activeIndex < 0) {
+        activeIndex = items.findIndex(function (item) {
+          return (
+            item.lineId === activeGlyphTarget.lineId &&
+            item.glyphIndex === activeGlyphTarget.glyphIndex
+          );
+        });
+      }
+    }
+    if (activeIndex < 0) {
+      activeIndex = 0;
+    }
+
+    var item = items[activeIndex];
+    activeGlyphTarget = {
+      lineId: item.lineId,
+      glyphIndex: item.glyphIndex,
+      char: item.char
+    };
+    return { items: items, item: item, index: activeIndex };
+  }
+
+  function glyphAdjustmentCount() {
+    return Object.keys(state.glyphAdjustments || {}).reduce(
+      function (total, lineId) {
+        return total + Object.keys(state.glyphAdjustments[lineId] || {}).length;
+      },
+      0
+    );
+  }
+
+  function formatSignedValue(value, suffix) {
+    var number = Number(value) || 0;
+    return (number > 0 ? "+" : "") + number + (suffix || "");
+  }
+
+  function updateGlyphEditorInterface() {
+    if (!elements.glyphFineTuneCard) {
+      return;
+    }
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    var empty = !item;
+    elements.glyphFineTuneEmpty.hidden = !empty;
+    elements.glyphFineTuneEditor.hidden = empty;
+    if (empty) {
+      return;
+    }
+
+    var adjustment = glyphAdjustmentFor(
+      item.lineId,
+      item.glyphIndex,
+      item.char
+    );
+    var adjusted = !glyphAdjustmentIsNeutral(adjustment);
+    elements.glyphTargetCharacter.textContent = item.char;
+    elements.glyphTargetLabel.textContent =
+      item.lineName +
+      " · 第 " +
+      item.linePosition +
+      " / " +
+      item.lineCount +
+      " 字";
+    elements.glyphTargetHint.textContent =
+      "当前微调“" + item.char + "” · " + (adjusted ? "已调整" : "默认位置");
+    elements.glyphTargetProgress.value =
+      resolved.index + 1 + " / " + resolved.items.length;
+    elements.previousGlyphButton.disabled = resolved.index <= 0;
+    elements.nextGlyphButton.disabled =
+      resolved.index >= resolved.items.length - 1;
+    elements.glyphResetButton.disabled = !adjusted;
+    elements.glyphResetAllButton.disabled = glyphAdjustmentCount() === 0;
+
+    elements.glyphScale.value = adjustment.scale;
+    elements.glyphOffsetX.value = adjustment.x;
+    elements.glyphOffsetY.value = adjustment.y;
+    elements.glyphRotation.value = adjustment.rotation;
+    updateRangeProgress(elements.glyphScale);
+    updateRangeProgress(elements.glyphOffsetX);
+    updateRangeProgress(elements.glyphOffsetY);
+    updateRangeProgress(elements.glyphRotation);
+    elements.glyphScaleValue.value = adjustment.scale + "%";
+    elements.glyphOffsetXValue.value = formatSignedValue(adjustment.x, "%");
+    elements.glyphOffsetYValue.value = formatSignedValue(adjustment.y, "%");
+    elements.glyphRotationValue.value = formatSignedValue(
+      adjustment.rotation,
+      "°"
+    );
+  }
+
+  function moveActiveGlyphTarget(delta) {
+    var resolved = resolveActiveGlyphTarget();
+    if (!resolved.item) {
+      return;
+    }
+    var nextIndex = clamp(
+      resolved.index + delta,
+      0,
+      resolved.items.length - 1
+    );
+    var next = resolved.items[nextIndex];
+    activeGlyphTarget = {
+      lineId: next.lineId,
+      glyphIndex: next.glyphIndex,
+      char: next.char
+    };
+    updateGlyphEditorInterface();
+  }
+
+  function setCurrentGlyphAdjustment(property, value) {
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    if (!item) {
+      return;
+    }
+    var adjustment = glyphAdjustmentFor(
+      item.lineId,
+      item.glyphIndex,
+      item.char
+    );
+    adjustment[property] = Number(value);
+    adjustment = normalizedGlyphAdjustment(adjustment, item.char);
+
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    var lineAdjustments = nextAdjustments[item.lineId] || {};
+    if (glyphAdjustmentIsNeutral(adjustment)) {
+      delete lineAdjustments[String(item.glyphIndex)];
+    } else {
+      lineAdjustments[String(item.glyphIndex)] = adjustment;
+    }
+    if (Object.keys(lineAdjustments).length) {
+      nextAdjustments[item.lineId] = lineAdjustments;
+    } else {
+      delete nextAdjustments[item.lineId];
+    }
+    state.glyphAdjustments = nextAdjustments;
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+  }
+
+  function resetCurrentGlyphAdjustment(notifyUser) {
+    var resolved = resolveActiveGlyphTarget();
+    var item = resolved.item;
+    if (!item) {
+      return;
+    }
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    if (nextAdjustments[item.lineId]) {
+      delete nextAdjustments[item.lineId][String(item.glyphIndex)];
+      if (!Object.keys(nextAdjustments[item.lineId]).length) {
+        delete nextAdjustments[item.lineId];
+      }
+    }
+    state.glyphAdjustments = nextAdjustments;
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast("“" + item.char + "”已恢复默认位置");
+    }
+  }
+
+  function resetAllGlyphAdjustments(notifyUser) {
+    if (!glyphAdjustmentCount()) {
+      return;
+    }
+    state.glyphAdjustments = {};
+    updateGlyphEditorInterface();
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast("已清除全部逐字微调");
+    }
+  }
+
+  function pruneGlyphAdjustmentsForLine(lineId, text) {
+    var current = state.glyphAdjustments[lineId];
+    if (!current) {
+      return;
+    }
+    var characters = splitGraphemes(text || "");
+    var nextLine = {};
+    Object.keys(current).forEach(function (glyphIndex) {
+      var index = Number(glyphIndex);
+      var character = characters[index];
+      if (
+        character &&
+        character.trim() &&
+        current[glyphIndex].char === character
+      ) {
+        nextLine[glyphIndex] = Object.assign({}, current[glyphIndex]);
+      }
+    });
+    var nextAdjustments = cloneGlyphAdjustments(state.glyphAdjustments);
+    if (Object.keys(nextLine).length) {
+      nextAdjustments[lineId] = nextLine;
+    } else {
+      delete nextAdjustments[lineId];
+    }
+    state.glyphAdjustments = nextAdjustments;
+  }
+
   function setFontLoadingProgress(value) {
     if (
       !elements.fontLoadingPopover ||
@@ -532,13 +886,13 @@
       "Unable to load lettering resources"
     );
     window.clearTimeout(fontLoadingHideTimer);
-    elements.fontLoadingLabel.textContent = "字体加载失败，请刷新重试";
+    elements.fontLoadingLabel.textContent = "字形资源加载失败，请刷新重试";
     elements.fontLoadingPercent.textContent = "";
     elements.fontLoadingPopover.classList.remove("is-complete", "is-hidden");
     elements.fontLoadingPopover.classList.add("is-error");
     elements.fontLoadingTrack.setAttribute(
       "aria-valuetext",
-      "字体加载失败，请刷新重试"
+      "字形资源加载失败，请刷新重试"
     );
     elements.canvas.removeAttribute("aria-busy");
   }
@@ -591,8 +945,10 @@
             }
             styleEngine.whenAtlasReady().then(function (loaded) {
               if (loaded === false) {
-                reject(new Error("Unable to load initial atlas glyphs"));
-                return;
+                // A failed individual glyph can still be rendered with the
+                // browser font fallback. Keep the editor usable instead of
+                // treating one small image request as a full font-pack error.
+                console.warn("Some initial atlas glyphs used font fallback.");
               }
               resolve(true);
             }, reject);
@@ -705,11 +1061,12 @@
 
   function canvasSizeFromOverlayImage() {
     var sourceImage = canvasRatioSourceImage();
-    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
+    var dimensions = imageDimensions(sourceImage);
+    if (!dimensions.width || !dimensions.height) {
       return defaults.canvasSize;
     }
     var ratio = clamp(
-      sourceImage.naturalWidth / sourceImage.naturalHeight,
+      dimensions.width / dimensions.height,
       0.2,
       5
     );
@@ -730,13 +1087,14 @@
       return;
     }
     var sourceImage = canvasRatioSourceImage();
-    if (!sourceImage || !sourceImage.naturalWidth || !sourceImage.naturalHeight) {
+    var dimensions = imageDimensions(sourceImage);
+    if (!dimensions.width || !dimensions.height) {
       elements.autoCanvasRatioShape.style.removeProperty("width");
       elements.autoCanvasRatioShape.style.removeProperty("height");
       return;
     }
     var ratio = clamp(
-      sourceImage.naturalWidth / sourceImage.naturalHeight,
+      dimensions.width / dimensions.height,
       0.28,
       3.8
     );
@@ -852,6 +1210,16 @@
     return (bytes / (1024 * 1024)).toFixed(1) + " MB";
   }
 
+  function imageDimensions(image) {
+    if (!image) {
+      return { width: 0, height: 0 };
+    }
+    return {
+      width: Number(image.naturalWidth || image.videoWidth || image.width) || 0,
+      height: Number(image.naturalHeight || image.videoHeight || image.height) || 0
+    };
+  }
+
   function nextLayerId() {
     layerSequence += 1;
     return "layer-" + Date.now().toString(36) + "-" + layerSequence.toString(36);
@@ -965,6 +1333,51 @@
     return "本地图片图层";
   }
 
+  function layerFrameDelay(layer, index) {
+    var delays = layer && layer.frameDelays;
+    if (delays && Number(delays[index]) > 0) {
+      return Math.max(20, Number(delays[index]));
+    }
+    return Math.max(20, Number(layer && layer.frameDelay) || 200);
+  }
+
+  function layerAnimationDuration(layer) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 0;
+    }
+    if (Number(layer.animationDuration) > 0) {
+      return Number(layer.animationDuration);
+    }
+    return layer.frames.reduce(function (duration, frame, index) {
+      return duration + layerFrameDelay(layer, index);
+    }, 0);
+  }
+
+  function layerMinimumFrameDelay(layer) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 200;
+    }
+    return layer.frames.reduce(function (smallest, frame, index) {
+      return Math.min(smallest, layerFrameDelay(layer, index));
+    }, 1000);
+  }
+
+  function frameIndexAtElapsedTime(layer, elapsed) {
+    if (!layer || !layer.frames || !layer.frames.length) {
+      return 0;
+    }
+    var duration = Math.max(20, layerAnimationDuration(layer));
+    var position = Math.max(0, Number(elapsed) || 0) % duration;
+    for (var index = 0; index < layer.frames.length; index += 1) {
+      var delay = layerFrameDelay(layer, index);
+      if (position < delay) {
+        return index;
+      }
+      position -= delay;
+    }
+    return layer.frames.length - 1;
+  }
+
   function imageForLayer(layer, time, forcedImages) {
     if (!layer) {
       return null;
@@ -973,9 +1386,12 @@
       return forcedImages[layer.id];
     }
     if (layer.type === "gif" && layer.frames && layer.frames.length) {
-      var elapsed = Math.max(0, Number(time) || performance.now()) - animationStartedAt;
-      var frameDelay = Math.max(20, Number(layer.frameDelay) || 200);
-      var frameIndex = Math.floor(elapsed / frameDelay) % layer.frames.length;
+      var clock = time == null ? performance.now() : Number(time);
+      if (!Number.isFinite(clock)) {
+        clock = performance.now();
+      }
+      var elapsed = Math.max(0, clock - animationStartedAt);
+      var frameIndex = frameIndexAtElapsedTime(layer, elapsed);
       return layer.frames[frameIndex];
     }
     return layer.image || null;
@@ -1864,7 +2280,8 @@
       name: layer.name + " 副本",
       x: clamp(layer.x + 4, 0, 100),
       y: clamp(layer.y + 4, 0, 100),
-      frames: layer.frames ? layer.frames.slice() : []
+      frames: layer.frames ? layer.frames.slice() : [],
+      frameDelays: layer.frameDelays ? layer.frameDelays.slice() : []
     });
     var index = layers.indexOf(layer);
     layers.splice(index + 1, 0, duplicate);
@@ -2424,10 +2841,394 @@
     image.src = source;
   }
 
+  function setLocalUploadBusy(busy) {
+    if (!elements.customUploadBlock || !elements.overlayFile) {
+      return;
+    }
+    window.clearTimeout(localUploadStatusTimer);
+    elements.customUploadBlock.classList.toggle("is-loading", Boolean(busy));
+    elements.overlayFile.disabled = Boolean(busy);
+    if (busy) {
+      elements.customUploadBlock.setAttribute("aria-busy", "true");
+    } else {
+      elements.customUploadBlock.removeAttribute("aria-busy");
+      if (elements.localUploadStatus && !elements.localUploadStatus.hidden) {
+        localUploadStatusTimer = window.setTimeout(function () {
+          elements.localUploadStatus.hidden = true;
+        }, 3600);
+      }
+    }
+  }
+
+  function setLocalUploadMessage(message) {
+    if (!elements.localUploadStatus) {
+      return;
+    }
+    window.clearTimeout(localUploadStatusTimer);
+    elements.localUploadStatus.textContent = message || "";
+    elements.localUploadStatus.hidden = !message;
+  }
+
+  function localGifError(code, message) {
+    var error = new Error(message);
+    error.code = code;
+    return error;
+  }
+
+  function readFileAsArrayBuffer(file) {
+    if (file && typeof file.arrayBuffer === "function") {
+      return file.arrayBuffer();
+    }
+    return new Promise(function (resolve, reject) {
+      var reader = new FileReader();
+      reader.onload = function () {
+        resolve(reader.result);
+      };
+      reader.onerror = function () {
+        reject(localGifError("GIF_READ_FAILED", "浏览器没能读出这个文件"));
+      };
+      reader.readAsArrayBuffer(file);
+    });
+  }
+
+  function localGifOutputSize(width, height, frameCount) {
+    var mobile = isMobileSaveBrowser();
+    var framePixelBudget = mobile
+      ? localGifLimits.mobileFramePixels
+      : localGifLimits.desktopFramePixels;
+    var maxSide = mobile ? 900 : 1200;
+    var scale = Math.min(
+      1,
+      maxSide / Math.max(width, height),
+      Math.sqrt(framePixelBudget / Math.max(1, width * height * frameCount))
+    );
+    return {
+      width: Math.max(1, Math.round(width * scale)),
+      height: Math.max(1, Math.round(height * scale)),
+      compressed: scale < 0.995
+    };
+  }
+
+  function decodeLocalGifFrames(arrayBuffer, onProgress) {
+    if (
+      !gifDecoder ||
+      typeof gifDecoder.parseGIF !== "function" ||
+      typeof gifDecoder.decompressFrame !== "function"
+    ) {
+      return Promise.reject(
+        localGifError(
+          "GIF_DECODER_UNAVAILABLE",
+          "GIF 解码组件没有加载，请刷新后再试"
+        )
+      );
+    }
+
+    var parsedGif;
+    try {
+      parsedGif = gifDecoder.parseGIF(arrayBuffer);
+    } catch (error) {
+      return Promise.reject(
+        localGifError("GIF_PARSE_FAILED", "文件不是有效的 GIF，或文件已经损坏")
+      );
+    }
+
+    var width = Number(parsedGif && parsedGif.lsd && parsedGif.lsd.width) || 0;
+    var height = Number(parsedGif && parsedGif.lsd && parsedGif.lsd.height) || 0;
+    var sourcePixels = width * height;
+    var mobile = isMobileSaveBrowser();
+    var maxSourcePixels = mobile
+      ? localGifLimits.mobileSourcePixels
+      : localGifLimits.maxSourcePixels;
+    var maxSourceSide = mobile
+      ? localGifLimits.mobileSourceSide
+      : localGifLimits.maxSourceSide;
+    var rawFrames = (parsedGif.frames || []).filter(function (frame) {
+      return Boolean(frame && frame.image);
+    });
+
+    if (!width || !height || !rawFrames.length) {
+      return Promise.reject(
+        localGifError("GIF_EMPTY", "GIF 中没有可用的画面")
+      );
+    }
+    if (
+      Math.max(width, height) > maxSourceSide ||
+      sourcePixels > maxSourcePixels
+    ) {
+      return Promise.reject(
+        localGifError(
+          "GIF_DIMENSIONS_TOO_LARGE",
+          "GIF 原始尺寸过大，请先缩小到 " + maxSourceSide + " px 长边以内"
+        )
+      );
+    }
+    if (rawFrames.length > localGifLimits.maxFrames) {
+      return Promise.reject(
+        localGifError(
+          "GIF_TOO_MANY_FRAMES",
+          "GIF 有 " + rawFrames.length + " 帧，实验功能目前最多支持 60 帧"
+        )
+      );
+    }
+
+    var invalidFrame = rawFrames.some(function (frame) {
+      var descriptor = frame.image && frame.image.descriptor;
+      var frameWidth = Number(descriptor && descriptor.width) || 0;
+      var frameHeight = Number(descriptor && descriptor.height) || 0;
+      return (
+        !frameWidth ||
+        !frameHeight ||
+        Math.max(frameWidth, frameHeight) > maxSourceSide ||
+        frameWidth * frameHeight > maxSourcePixels
+      );
+    });
+    if (invalidFrame) {
+      return Promise.reject(
+        localGifError("GIF_FRAME_TOO_LARGE", "GIF 中包含尺寸异常的帧")
+      );
+    }
+
+    var outputSize = localGifOutputSize(width, height, rawFrames.length);
+    var compositeCanvas = document.createElement("canvas");
+    compositeCanvas.width = width;
+    compositeCanvas.height = height;
+    var compositeContext = compositeCanvas.getContext("2d");
+    var patchCanvas = document.createElement("canvas");
+    var patchContext = patchCanvas.getContext("2d");
+    if (!compositeContext || !patchContext) {
+      return Promise.reject(
+        localGifError("GIF_CANVAS_UNAVAILABLE", "当前浏览器无法建立 GIF 画布")
+      );
+    }
+
+    var frames = [];
+    var frameDelays = [];
+    var frameIndex = 0;
+    var previousDisposal = 0;
+    var previousDimensions = null;
+    var previousRestore = null;
+
+    function applyPreviousDisposal() {
+      if (previousDisposal === 2 && previousDimensions) {
+        compositeContext.clearRect(
+          previousDimensions.left,
+          previousDimensions.top,
+          previousDimensions.width,
+          previousDimensions.height
+        );
+      } else if (previousDisposal === 3 && previousRestore) {
+        compositeContext.putImageData(previousRestore, 0, 0);
+      }
+    }
+
+    function decodeNextFrame() {
+      if (frameIndex >= rawFrames.length) {
+        return Promise.resolve({
+          frames: frames,
+          frameDelays: frameDelays,
+          duration: frameDelays.reduce(function (total, delay) {
+            return total + delay;
+          }, 0),
+          width: width,
+          height: height,
+          outputWidth: outputSize.width,
+          outputHeight: outputSize.height,
+          compressed: outputSize.compressed
+        });
+      }
+
+      var decodedFrame;
+      try {
+        decodedFrame = gifDecoder.decompressFrame(
+          rawFrames[frameIndex],
+          parsedGif.gct,
+          true
+        );
+      } catch (error) {
+        return Promise.reject(
+          localGifError(
+            "GIF_DECODE_FAILED",
+            "第 " + (frameIndex + 1) + " 帧解码失败"
+          )
+        );
+      }
+      if (!decodedFrame || !decodedFrame.patch || !decodedFrame.dims) {
+        return Promise.reject(
+          localGifError("GIF_DECODE_FAILED", "GIF 帧数据不完整")
+        );
+      }
+
+      applyPreviousDisposal();
+      var restoreBeforeFrame = null;
+      if (Number(decodedFrame.disposalType) === 3) {
+        try {
+          restoreBeforeFrame = compositeContext.getImageData(0, 0, width, height);
+        } catch (error) {
+          restoreBeforeFrame = null;
+        }
+      }
+
+      var dimensions = decodedFrame.dims;
+      patchCanvas.width = dimensions.width;
+      patchCanvas.height = dimensions.height;
+      var patchImageData = patchContext.createImageData(
+        dimensions.width,
+        dimensions.height
+      );
+      patchImageData.data.set(decodedFrame.patch);
+      patchContext.putImageData(patchImageData, 0, 0);
+      compositeContext.drawImage(
+        patchCanvas,
+        Number(dimensions.left) || 0,
+        Number(dimensions.top) || 0
+      );
+
+      var outputCanvas = document.createElement("canvas");
+      outputCanvas.width = outputSize.width;
+      outputCanvas.height = outputSize.height;
+      var outputContext = outputCanvas.getContext("2d");
+      if (!outputContext) {
+        return Promise.reject(
+          localGifError("GIF_CANVAS_UNAVAILABLE", "当前浏览器无法生成 GIF 帧")
+        );
+      }
+      outputContext.drawImage(
+        compositeCanvas,
+        0,
+        0,
+        outputSize.width,
+        outputSize.height
+      );
+      frames.push(outputCanvas);
+      frameDelays.push(clamp(Number(decodedFrame.delay) || 100, 20, 4000));
+
+      previousDisposal = Number(decodedFrame.disposalType) || 0;
+      previousDimensions = {
+        left: Number(dimensions.left) || 0,
+        top: Number(dimensions.top) || 0,
+        width: Number(dimensions.width) || 0,
+        height: Number(dimensions.height) || 0
+      };
+      previousRestore = restoreBeforeFrame;
+      decodedFrame.patch = null;
+      decodedFrame.pixels = null;
+      frameIndex += 1;
+      if (onProgress) {
+        onProgress(frameIndex / rawFrames.length);
+      }
+
+      if (frameIndex % 3 === 0) {
+        return new Promise(function (resolve) {
+          window.setTimeout(resolve, 0);
+        }).then(decodeNextFrame);
+      }
+      return decodeNextFrame();
+    }
+
+    return decodeNextFrame();
+  }
+
+  function loadLocalGifFile(file, options) {
+    options = options || {};
+    var fileName = options.name || file.name || "本地 GIF";
+    if (file.size > localGifLimits.maxBytes) {
+      var tooLargeMessage = "GIF 不能超过 15 MB";
+      setLocalUploadMessage("未添加 " + fileName + "：" + tooLargeMessage);
+      showToast(tooLargeMessage);
+      elements.overlayFile.value = "";
+      return Promise.resolve(null);
+    }
+
+    setLocalUploadMessage("正在解析 " + fileName + "…");
+    return readFileAsArrayBuffer(file)
+      .then(function (arrayBuffer) {
+        return decodeLocalGifFrames(arrayBuffer, function (progress) {
+          setLocalUploadMessage(
+            "正在解析 " + fileName + " · " + Math.round(progress * 100) + "%"
+          );
+        });
+      })
+      .then(function (decoded) {
+        var wasFirstImage = getImageLayers().length === 0;
+        var objectUrl = URL.createObjectURL(file);
+        var layer = {
+          id: nextLayerId(),
+          type: "gif",
+          sourceType: "upload",
+          name: fileName,
+          image: decoded.frames[0],
+          frames: decoded.frames,
+          frameDelay: decoded.frameDelays[0] || 100,
+          frameDelays: decoded.frameDelays,
+          animationDuration: decoded.duration,
+          officialAsset: null,
+          thumbnailSrc: objectUrl,
+          objectUrl: objectUrl,
+          bytes: options.size || file.size || 0,
+          originalWidth: decoded.width,
+          originalHeight: decoded.height,
+          decodedWidth: decoded.outputWidth,
+          decodedHeight: decoded.outputHeight,
+          locallyCompressed: decoded.compressed,
+          experimental: true,
+          scale: 100,
+          x: 50,
+          y: 50,
+          rotation: 0,
+          opacity: 100,
+          defaultScale: 100,
+          defaultX: 50,
+          defaultY: 50,
+          defaultRotation: 0,
+          defaultOpacity: 100,
+          visible: true,
+          locked: false
+        };
+        animationStartedAt = performance.now();
+        addLayer(layer, { belowArtwork: true });
+        if (wasFirstImage && options.followRatio !== false) {
+          state.canvasRatioMode = "auto";
+          state.canvasSize = canvasSizeFromOverlayImage();
+          elements.canvasSize.value = state.canvasSize;
+        }
+        elements.overlayFile.value = "";
+        updateOverlayInterface();
+        updateCanvasRatioInterface();
+        scheduleRender();
+        startGifPreviewLoop();
+        var resultMessage =
+          "GIF 已添加 · " + decoded.frames.length + " 帧" +
+          (decoded.compressed
+            ? " · 已压缩到 " + decoded.outputWidth + " × " + decoded.outputHeight
+            : "");
+        setLocalUploadMessage(resultMessage);
+        if (!options.silent) {
+          showToast(resultMessage);
+        }
+        anchorFixedViewportAfterLayout(false);
+        return layer;
+      })
+      .catch(function (error) {
+        var message = error && error.message
+          ? error.message
+          : "这个 GIF 暂时无法解码";
+        console.warn("Could not decode a local GIF.", error);
+        elements.overlayFile.value = "";
+        setLocalUploadMessage("GIF 未添加：" + message);
+        showToast("GIF 未添加：" + message);
+        return null;
+      });
+  }
+
   function loadOverlayFile(file, options) {
     options = options || {};
     if (!file) {
       return Promise.resolve(null);
+    }
+    var gifType = /^image\/gif$/i.test(file.type || "");
+    var gifName = /\.gif$/i.test(options.name || file.name || "");
+    if (gifType || gifName) {
+      return loadLocalGifFile(file, options);
     }
     var supportedType = /^(image\/png|image\/jpeg|image\/webp)$/i.test(
       file.type || ""
@@ -2436,7 +3237,7 @@
       options.name || file.name || ""
     );
     if (!supportedType && !supportedName) {
-      showToast("请选择 PNG、JPG 或 WebP 图片");
+      showToast("请选择 PNG、JPG、WebP 或 GIF 图片");
       elements.overlayFile.value = "";
       return Promise.resolve(null);
     }
@@ -2446,6 +3247,9 @@
       return Promise.resolve(null);
     }
 
+    setLocalUploadMessage(
+      "正在添加 " + (options.name || file.name || "这张图片") + "…"
+    );
     var objectUrl = URL.createObjectURL(file);
     return new Promise(function (resolve) {
       var image = new Image();
@@ -2490,6 +3294,7 @@
         if (!options.silent) {
           showToast("图片已添加为新图层");
         }
+        setLocalUploadMessage("图片已添加为新图层");
         anchorFixedViewportAfterLayout(false);
         resolve(layer);
       };
@@ -2497,6 +3302,7 @@
         URL.revokeObjectURL(objectUrl);
         elements.overlayFile.value = "";
         showToast("无法读取这张图片");
+        setLocalUploadMessage("图片未添加：浏览器无法读取这个文件");
         resolve(null);
       };
       image.src = objectUrl;
@@ -2516,6 +3322,7 @@
     var layer = getActiveLayer();
     var hasImage = isImageLayer(layer);
     var activeImage = hasImage ? imageForLayer(layer) : null;
+    var activeDimensions = imageDimensions(activeImage);
     var locked = hasImage && layer.locked;
     if (hasImage) {
       syncLayerControls(layer);
@@ -2564,23 +3371,38 @@
       if (layer.type === "gif" && officialCharacter) {
         elements.overlayFileMeta.textContent =
           "动态贴纸 · " + officialCharacter.frameCount + " 帧 · 循环播放";
+      } else if (layer.type === "gif" && layer.sourceType === "upload") {
+        var sourceWidth = layer.originalWidth || activeDimensions.width;
+        var sourceHeight = layer.originalHeight || activeDimensions.height;
+        elements.overlayFileMeta.textContent =
+          "实验性 GIF · " +
+          layer.frames.length +
+          " 帧 · " +
+          sourceWidth +
+          " × " +
+          sourceHeight +
+          " px · " +
+          formatFileSize(layer.bytes || 0) +
+          (layer.locallyCompressed
+            ? " · 预览优化至 " + activeDimensions.width + " × " + activeDimensions.height
+            : "");
       } else if (layer.sourceType === "official-decoration") {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · 官方装饰";
       } else if (layer.sourceType === "official-static") {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · 官方贴纸";
       } else {
         elements.overlayFileMeta.textContent =
-          activeImage.naturalWidth +
+          activeDimensions.width +
           " × " +
-          activeImage.naturalHeight +
+          activeDimensions.height +
           " px · " +
           formatFileSize(layer.bytes || 0);
       }
@@ -2609,12 +3431,13 @@
   function drawOverlayImage(ctx, width, height, image, layer) {
     layer = layer || getActiveLayer();
     image = image || imageForLayer(layer);
-    if (!image || !image.naturalWidth || !image.naturalHeight) {
+    var dimensions = imageDimensions(image);
+    if (!dimensions.width || !dimensions.height) {
       return;
     }
     var drawWidth = width * ((layer.scale || 100) / 100);
     var drawHeight =
-      drawWidth * (image.naturalHeight / image.naturalWidth);
+      drawWidth * (dimensions.height / dimensions.width);
     var centerX = width * ((layer.x == null ? 50 : layer.x) / 100);
     var centerY = height * ((layer.y == null ? 50 : layer.y) / 100);
 
@@ -2791,13 +3614,13 @@
     }
     if (isImageLayer(layer)) {
       var layerImage = imageForLayer(layer);
+      var layerImageDimensions = imageDimensions(layerImage);
       if (
         !layer ||
         layer.locked ||
         !layer.visible ||
-        !layerImage ||
-        !layerImage.naturalWidth ||
-        !layerImage.naturalHeight
+        !layerImageDimensions.width ||
+        !layerImageDimensions.height
       ) {
         return null;
       }
@@ -2808,7 +3631,7 @@
         width: overlayWidth,
         height:
           overlayWidth *
-          (layerImage.naturalHeight / layerImage.naturalWidth),
+          (layerImageDimensions.height / layerImageDimensions.width),
         angle: layer.rotation,
         label:
           layer.name + " · " +
@@ -3478,6 +4301,19 @@
     };
   }
 
+  function availableTitleFontFamily(family) {
+    if (!styleEngine || styleEngine.isReady() || initialFontLoadingError) {
+      return family;
+    }
+    // The atlas is the normal title renderer. While its index is still loading,
+    // avoid making Canvas start multi-megabyte fallback font downloads that may
+    // never be needed. If the atlas itself fails, the original family is used.
+    return String(family).replace(
+      /"Logo(?:DesignedCN|SkeletonCN|HandCN|HandEN)"\s*,?\s*/g,
+      ""
+    );
+  }
+
   function makeGlyphLayout(ctx, text, fontSize, options) {
     var chars = splitGraphemes(text);
     var config = getFontConfig(options.style, text);
@@ -3507,7 +4343,12 @@
       ? visibleIndexes[visibleIndexes.length - 1]
       : -1;
 
-    ctx.font = config.weight + " " + fontSize + "px " + config.family;
+    ctx.font =
+      config.weight +
+      " " +
+      fontSize +
+      "px " +
+      availableTitleFontFamily(config.family);
     ctx.textBaseline = "alphabetic";
 
     var glyphs = chars.map(function (char, index) {
@@ -3637,6 +4478,7 @@
       config: config,
       tracking: tracking,
       template: template,
+      lineId: options.lineId || "",
       lineIndex: options.lineIndex || 0
     };
   }
@@ -3667,9 +4509,27 @@
   }
 
   function measureSubtitleLayout(ctx, text) {
+    var characters = splitGraphemes(text);
+    var prefix = "";
+    var prefixWidth = 0;
+    var glyphs = characters.map(function (character, index) {
+      prefix += character;
+      var nextWidth = ctx.measureText(prefix).width;
+      var glyphWidth = ctx.measureText(character).width;
+      var glyph = {
+        char: character,
+        index: index,
+        offset: nextWidth - glyphWidth,
+        width: glyphWidth,
+        advance: nextWidth - prefixWidth,
+        whitespace: !character.trim()
+      };
+      prefixWidth = nextWidth;
+      return glyph;
+    });
     return {
-      glyphs: null,
-      totalWidth: ctx.measureText(text).width
+      glyphs: glyphs,
+      totalWidth: prefixWidth
     };
   }
 
@@ -3720,7 +4580,8 @@
       family: family,
       weight: weight,
       tracking: 0,
-      glyphs: bestLayout.glyphs
+      glyphs: bestLayout.glyphs,
+      lineId: "text-subtitle"
     };
   }
 
@@ -4046,7 +4907,11 @@
     }
 
     ctx.font =
-      line.config.weight + " " + line.fontSize + "px " + line.config.family;
+      line.config.weight +
+      " " +
+      line.fontSize +
+      "px " +
+      availableTitleFontFamily(line.config.family);
     ctx.textBaseline = "alphabetic";
     ctx.lineJoin = "round";
     ctx.miterLimit = 2;
@@ -4058,13 +4923,25 @@
       }
 
       var glyphWidth = glyph.naturalWidth * glyph.scaleX;
+      var adjustment = glyphAdjustmentFor(
+        line.lineId,
+        glyph.index,
+        glyph.char
+      );
+      var adjustmentScale = adjustment.scale / 100;
       ctx.save();
       ctx.translate(
-        x + glyphWidth / 2,
-        line.y + glyph.yOffset + (shadowPass ? state.titleShadowOffsetY : 0)
+        x + glyphWidth / 2 + line.fontSize * (adjustment.x / 100),
+        line.y +
+          glyph.yOffset +
+          line.fontSize * (adjustment.y / 100) +
+          (shadowPass ? state.titleShadowOffsetY : 0)
       );
-      ctx.rotate(glyph.rotation);
-      ctx.scale(glyph.scaleX, glyph.scaleY);
+      ctx.rotate(glyph.rotation + (adjustment.rotation * Math.PI) / 180);
+      ctx.scale(
+        glyph.scaleX * adjustmentScale,
+        glyph.scaleY * adjustmentScale
+      );
       ctx.textAlign = "left";
 
       var vectorDrawn = useVector
@@ -4077,8 +4954,16 @@
             solidColor: titleInk
           })
         : false;
+      var atlasState =
+        useVector &&
+        glyph.fontKey &&
+        glyph.fontKey.indexOf("atlas:") === 0 &&
+        styleEngine.atlasGlyphState
+          ? styleEngine.atlasGlyphState(glyph.fontKey)
+          : "unavailable";
+      var waitingForAtlas = atlasState === "idle" || atlasState === "loading";
 
-      if (!vectorDrawn) {
+      if (!vectorDrawn && !waitingForAtlas) {
         if (!shadowPass && state.outline) {
           ctx.strokeStyle = rgba(outlineColor, 0.95);
           ctx.lineWidth = Math.max(2.1, line.fontSize * 0.014);
@@ -4178,36 +5063,58 @@
 
   function drawSubtitle(ctx, subtitle, centerX) {
     var color = mixColor(state.primaryColor, "#00101d", 0.11);
-    var tracked = Boolean(subtitle.glyphs);
+    var adjustedGlyphs = (subtitle.glyphs || []).filter(function (glyph) {
+      return !glyph.whitespace && !glyphAdjustmentIsNeutral(
+        glyphAdjustmentFor(subtitle.lineId, glyph.index, glyph.char)
+      );
+    });
+    var useAdjustedGlyphs = adjustedGlyphs.length > 0;
     ctx.save();
     ctx.font =
       subtitle.weight + " " + subtitle.fontSize + "px " + subtitle.family;
     ctx.textBaseline = "alphabetic";
-    ctx.textAlign = tracked ? "left" : "center";
+    ctx.textAlign = "center";
     ctx.lineJoin = "round";
 
-    function drawTrackedGlyphs(method) {
-      var x = centerX - subtitle.totalWidth / 2;
+    function drawAdjustedGlyphs() {
+      var startX = centerX - subtitle.totalWidth / 2;
       subtitle.glyphs.forEach(function (glyph) {
-        ctx[method](glyph.char, x, subtitle.y);
-        x += glyph.advance;
+        if (glyph.whitespace) {
+          return;
+        }
+        var adjustment = glyphAdjustmentFor(
+          subtitle.lineId,
+          glyph.index,
+          glyph.char
+        );
+        var adjustmentScale = adjustment.scale / 100;
+        ctx.save();
+        ctx.translate(
+          startX +
+            glyph.offset +
+            glyph.width / 2 +
+            subtitle.fontSize * (adjustment.x / 100),
+          subtitle.y + subtitle.fontSize * (adjustment.y / 100)
+        );
+        ctx.rotate((adjustment.rotation * Math.PI) / 180);
+        ctx.scale(adjustmentScale, adjustmentScale);
+        if (state.outline) {
+          ctx.strokeText(glyph.char, 0, 0);
+        }
+        ctx.fillText(glyph.char, 0, 0);
+        ctx.restore();
       });
     }
 
-    if (state.outline) {
-      ctx.strokeStyle = rgba(mixColor(state.skyColor, "#ffffff", 0.83), 0.86);
-      ctx.lineWidth = Math.max(1.3, subtitle.fontSize * 0.024);
-      if (tracked) {
-        drawTrackedGlyphs("strokeText");
-      } else {
+    ctx.strokeStyle = rgba(mixColor(state.skyColor, "#ffffff", 0.83), 0.86);
+    ctx.lineWidth = Math.max(1.3, subtitle.fontSize * 0.024);
+    ctx.fillStyle = color;
+    if (useAdjustedGlyphs) {
+      drawAdjustedGlyphs();
+    } else {
+      if (state.outline) {
         ctx.strokeText(subtitle.text, centerX, subtitle.y);
       }
-    }
-
-    ctx.fillStyle = color;
-    if (tracked) {
-      drawTrackedGlyphs("fillText");
-    } else {
       ctx.fillText(subtitle.text, centerX, subtitle.y);
     }
     ctx.restore();
@@ -4644,6 +5551,7 @@
           style: state.fontStyle,
           irregularity: state.irregularity,
           seed: line1Seed,
+          lineId: "text-line-1",
           lineIndex: 0,
           atlasMode: runtimeAtlasMode
         }
@@ -4671,6 +5579,7 @@
           style: state.fontStyle,
           irregularity: state.irregularity,
           seed: line2Seed,
+          lineId: "text-line-2",
           lineIndex: 1,
           atlasMode: runtimeAtlasMode
         }
@@ -4956,6 +5865,7 @@
     elements.line1Count.value = graphemeCount(state.line1);
     elements.line2Count.value = graphemeCount(state.line2);
     elements.subtitleCount.value = graphemeCount(state.subtitle);
+    updateGlyphEditorInterface();
     updateLayerModeInterface();
     updateRange(
       elements.selectedGroupLineGap,
@@ -5119,6 +6029,7 @@
   function cloneLayerForHistory(layer) {
     var clone = Object.assign({}, layer);
     clone.frames = layer.frames ? layer.frames.slice() : [];
+    clone.frameDelays = layer.frameDelays ? layer.frameDelays.slice() : [];
     clone.officialAsset = layer.officialAsset
       ? Object.assign({}, layer.officialAsset)
       : null;
@@ -5132,7 +6043,9 @@
       textLayers[layerId] = cloneLayerForHistory(textLayerStore[layerId]);
     });
     return {
-      state: Object.assign({}, state),
+      state: Object.assign({}, state, {
+        glyphAdjustments: cloneGlyphAdjustments(state.glyphAdjustments)
+      }),
       textLayers: textLayers,
       decorationLayer: cloneLayerForHistory(decorationLayerStore),
       letteringGroup: cloneLayerForHistory(letteringGroupStore),
@@ -5251,7 +6164,7 @@
 
   function restoreHistorySnapshot(snapshot) {
     historySuspended = true;
-    state = Object.assign({}, defaults, snapshot.state);
+    state = createState(snapshot.state);
     textLayerStore = Object.create(null);
     Object.keys(snapshot.textLayers).forEach(function (layerId) {
       textLayerStore[layerId] = cloneLayerForHistory(
@@ -5384,6 +6297,83 @@
     toastTimer = window.setTimeout(function () {
       elements.toast.classList.remove("visible");
     }, 2100);
+  }
+
+  function isWelcomeDialogOpen() {
+    return Boolean(
+      elements.welcomeDialog &&
+      !elements.welcomeDialog.hidden &&
+      !elements.welcomeDialog.classList.contains("is-leaving")
+    );
+  }
+
+  function openWelcomeDialog() {
+    if (!elements.welcomeDialog || !elements.welcomeStartButton) {
+      return;
+    }
+    window.clearTimeout(welcomeCloseTimer);
+    elements.welcomeDialog.hidden = false;
+    elements.welcomeDialog.classList.remove("is-leaving");
+    elements.welcomeStartButton.disabled = false;
+    document.body.classList.add("welcome-open");
+    if (elements.appShell) {
+      elements.appShell.setAttribute("inert", "");
+    }
+    requestAnimationFrame(function () {
+      elements.welcomeStartButton.focus({ preventScroll: true });
+    });
+  }
+
+  function finishClosingWelcomeDialog() {
+    elements.welcomeDialog.hidden = true;
+    elements.welcomeDialog.classList.remove("is-leaving");
+    elements.welcomeStartButton.disabled = false;
+    document.body.classList.remove("welcome-open");
+    if (elements.appShell) {
+      elements.appShell.removeAttribute("inert");
+    }
+    var firstEditorTab =
+      elements.editorSectionTabs && elements.editorSectionTabs[0];
+    if (firstEditorTab && typeof firstEditorTab.focus === "function") {
+      firstEditorTab.focus({ preventScroll: true });
+    }
+  }
+
+  function closeWelcomeDialog() {
+    if (!isWelcomeDialogOpen()) {
+      return;
+    }
+    elements.welcomeDialog.classList.add("is-leaving");
+    elements.welcomeStartButton.disabled = true;
+    window.clearTimeout(welcomeCloseTimer);
+    var reducedMotion = window.matchMedia(
+      "(prefers-reduced-motion: reduce)"
+    ).matches;
+    welcomeCloseTimer = window.setTimeout(
+      finishClosingWelcomeDialog,
+      reducedMotion ? 0 : 240
+    );
+  }
+
+  function trapWelcomeDialogFocus(event) {
+    var focusable = Array.from(
+      elements.welcomeDialog.querySelectorAll(
+        'a[href], button:not([disabled]), [tabindex]:not([tabindex="-1"])'
+      )
+    );
+    if (!focusable.length) {
+      event.preventDefault();
+      return;
+    }
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) {
+      event.preventDefault();
+      last.focus();
+    } else if (!event.shiftKey && document.activeElement === last) {
+      event.preventDefault();
+      first.focus();
+    }
   }
 
   function openAboutDialog() {
@@ -5589,6 +6579,39 @@
     );
   }
 
+  function isEmbeddedMobileBrowser() {
+    var userAgent = navigator.userAgent || "";
+    return /MicroMessenger|MQQBrowser|QQ\/|TBS\/|Weibo|AlipayClient|DingTalk/i.test(
+      userAgent
+    );
+  }
+
+  function updateBrowserCompatibilityTip() {
+    if (!elements.welcomeBrowserTip || !isEmbeddedMobileBrowser()) {
+      return;
+    }
+    elements.welcomeBrowserTip.innerHTML =
+      '<span aria-hidden="true">i</span>当前为应用内置浏览器；若资源或保存异常，请从右上角使用系统浏览器打开～';
+  }
+
+  function compatibleImageExportScale(dimensions, requestedScale) {
+    var scale = clamp(Math.round(Number(requestedScale) || 1), 1, 3);
+    var constrainedBrowser = isEmbeddedMobileBrowser();
+    if (!constrainedBrowser) {
+      return scale;
+    }
+
+    var maxDimension = Math.max(dimensions.width, dimensions.height);
+    var pixelCount = dimensions.width * dimensions.height;
+    while (
+      scale > 1 &&
+      (maxDimension * scale > 4096 || pixelCount * scale * scale > 12000000)
+    ) {
+      scale -= 1;
+    }
+    return scale;
+  }
+
   function createArtworkFile(blob, filename) {
     if (typeof File !== "function") {
       return null;
@@ -5617,9 +6640,12 @@
   function releasePendingSave(revokeDelay) {
     var objectUrl = pendingSaveObjectUrl;
     pendingSaveFile = null;
+    pendingSaveBlob = null;
     pendingSaveFilename = "";
     pendingSaveObjectUrl = "";
+    pendingSaveDataUrl = "";
     pendingSaveDimensions = "";
+    pendingSaveGeneration += 1;
     if (objectUrl) {
       window.setTimeout(function () {
         URL.revokeObjectURL(objectUrl);
@@ -5636,6 +6662,9 @@
     elements.saveImagePreview.hidden = true;
     elements.savedImagePreview.removeAttribute("src");
     elements.systemSaveButton.disabled = false;
+    elements.openSavedImageButton.disabled = false;
+    elements.openSavedImageButton.innerHTML =
+      '<span aria-hidden="true">▣</span>打开原图后长按保存';
     releasePendingSave(120000);
     if (saveAssistReturnFocus && saveAssistReturnFocus.focus) {
       saveAssistReturnFocus.focus();
@@ -5647,6 +6676,8 @@
     if (pendingSaveObjectUrl) {
       releasePendingSave(120000);
     }
+    pendingSaveGeneration += 1;
+    pendingSaveBlob = blob;
     pendingSaveFilename = filename;
     pendingSaveFile = createArtworkFile(blob, filename);
     pendingSaveObjectUrl = URL.createObjectURL(blob);
@@ -5658,6 +6689,10 @@
     elements.saveAssistDescription.textContent = gifFile
       ? "这个浏览器可能不会自动保存 GIF，请选择一种可靠的保存方式。"
       : "这个浏览器可能不会自动保存文件，请选择一种可靠的保存方式。";
+    if (isEmbeddedMobileBrowser()) {
+      elements.saveAssistDescription.textContent =
+        "当前为应用内置浏览器。若长按没有保存选项，请在右上角选择用系统浏览器打开。";
+    }
     elements.savedImagePreview.alt = gifFile
       ? "刚刚生成的动态 GIF 作品"
       : "刚刚生成的高清字标作品";
@@ -5667,6 +6702,9 @@
     elements.savedImagePreview.removeAttribute("src");
     elements.systemSaveButton.hidden = !canShareArtworkFile(pendingSaveFile);
     elements.systemSaveButton.disabled = false;
+    elements.openSavedImageButton.disabled = false;
+    elements.openSavedImageButton.innerHTML =
+      '<span aria-hidden="true">▣</span>打开原图后长按保存';
     elements.saveAssist.hidden = false;
     window.requestAnimationFrame(function () {
       var firstAction = elements.systemSaveButton.hidden
@@ -5727,13 +6765,51 @@
       closeSaveAssist();
       return;
     }
-    elements.savedImagePreview.src = pendingSaveObjectUrl;
-    elements.saveAssistCard.hidden = true;
-    elements.saveImagePreview.hidden = false;
-    elements.renderStatus.textContent =
-      "请长按原图保存 · " + pendingSaveDimensions;
-    elements.closeSavedImageButton.focus();
-    showToast("长按原图即可保存到相册");
+    var generation = pendingSaveGeneration;
+    var previewPromise = Promise.resolve(pendingSaveObjectUrl);
+    if (
+      isEmbeddedMobileBrowser() &&
+      pendingSaveBlob &&
+      typeof FileReader === "function"
+    ) {
+      if (pendingSaveDataUrl) {
+        previewPromise = Promise.resolve(pendingSaveDataUrl);
+      } else {
+        elements.openSavedImageButton.disabled = true;
+        elements.openSavedImageButton.textContent = "正在准备兼容原图…";
+        previewPromise = new Promise(function (resolve) {
+          var reader = new FileReader();
+          reader.onload = function () {
+            resolve(typeof reader.result === "string" ? reader.result : "");
+          };
+          reader.onerror = function () {
+            resolve("");
+          };
+          reader.readAsDataURL(pendingSaveBlob);
+        }).then(function (dataUrl) {
+          if (generation === pendingSaveGeneration && dataUrl) {
+            pendingSaveDataUrl = dataUrl;
+          }
+          return dataUrl || pendingSaveObjectUrl;
+        });
+      }
+    }
+
+    previewPromise.then(function (previewUrl) {
+      elements.openSavedImageButton.disabled = false;
+      elements.openSavedImageButton.innerHTML =
+        '<span aria-hidden="true">▣</span>打开原图后长按保存';
+      if (generation !== pendingSaveGeneration || !previewUrl) {
+        return;
+      }
+      elements.savedImagePreview.src = previewUrl;
+      elements.saveAssistCard.hidden = true;
+      elements.saveImagePreview.hidden = false;
+      elements.renderStatus.textContent =
+        "请长按原图保存 · " + pendingSaveDimensions;
+      elements.closeSavedImageButton.focus();
+      showToast("长按原图即可保存到相册");
+    });
   }
 
   function startDirectDownload(blob, filename) {
@@ -5764,17 +6840,15 @@
   }
 
   function waitForArtworkResources() {
-    var ready;
-    if (logoFontsReady || vectorEngineReady) {
-      ready = Promise.all([
-        logoFontsReady || Promise.resolve(),
-        vectorEngineReady || Promise.resolve()
-      ]);
-    } else if (document.fonts && document.fonts.ready) {
-      ready = document.fonts.ready;
-    } else {
-      ready = Promise.resolve();
-    }
+    var browserFontsReady =
+      document.fonts && document.fonts.ready
+        ? document.fonts.ready
+        : Promise.resolve();
+    var ready = Promise.all([
+      logoFontsReady || Promise.resolve(),
+      vectorEngineReady || Promise.resolve(),
+      browserFontsReady
+    ]);
     return Promise.resolve(ready).then(function () {
       if (styleEngine && styleEngine.whenAtlasReady) {
         // Start requests for glyphs entered immediately before export.
@@ -5840,13 +6914,10 @@
 
   function gifTimeline(animatedLayers) {
     var step = animatedLayers.reduce(function (smallest, layer) {
-      return Math.min(smallest, Math.max(20, Number(layer.frameDelay) || 200));
+      return Math.min(smallest, layerMinimumFrameDelay(layer));
     }, 250);
     var duration = animatedLayers.reduce(function (longest, layer) {
-      return Math.max(
-        longest,
-        Math.max(1, layer.frames.length) * Math.max(20, Number(layer.frameDelay) || 200)
-      );
+      return Math.max(longest, layerAnimationDuration(layer));
     }, step);
     duration = Math.min(4000, Math.max(step, duration));
     var frameCount = clamp(Math.ceil(duration / step), 2, 24);
@@ -5866,7 +6937,11 @@
         var asset =
           layer.officialAsset && findOfficialCharacter(layer.officialAsset.id);
         if (!asset) {
-          return layer;
+          completed += 1;
+          if (onProgress) {
+            onProgress(completed / animatedLayers.length);
+          }
+          return Promise.resolve(layer);
         }
         return loadGifFrameImages(asset).then(function (images) {
           layer.frames = images;
@@ -5894,9 +6969,7 @@
       var time = index * timeline.delay;
       var layerImages = {};
       animatedLayers.forEach(function (layer) {
-        var frameIndex =
-          Math.floor(time / Math.max(20, Number(layer.frameDelay) || 200)) %
-          layer.frames.length;
+        var frameIndex = frameIndexAtElapsedTime(layer, time);
         layerImages[layer.id] = layer.frames[frameIndex];
       });
       renderArtwork(canvas, output.scale, { layerImages: layerImages, time: time });
@@ -6070,6 +7143,123 @@
       });
   }
 
+  function releaseExportCanvas(canvas) {
+    if (!canvas) {
+      return;
+    }
+    // Mobile WebViews can retain detached canvas backing stores for a while.
+    // Shrinking it explicitly releases the large RGBA buffer after encoding.
+    canvas.width = 1;
+    canvas.height = 1;
+  }
+
+  function createExportError(code, message) {
+    var error = new Error(message || code);
+    error.code = code;
+    return error;
+  }
+
+  function dataUrlToBlob(dataUrl) {
+    var parts = String(dataUrl || "").split(",");
+    if (parts.length < 2 || typeof atob !== "function") {
+      throw createExportError(
+        "PNG_ENCODING_UNSUPPORTED",
+        "This browser cannot encode PNG files"
+      );
+    }
+    var mimeMatch = parts[0].match(/^data:([^;]+)/);
+    var binary = atob(parts[1]);
+    var bytes = new Uint8Array(binary.length);
+    for (var index = 0; index < binary.length; index += 1) {
+      bytes[index] = binary.charCodeAt(index);
+    }
+    return new Blob([bytes], {
+      type: mimeMatch ? mimeMatch[1] : "image/png"
+    });
+  }
+
+  function renderPngAtScale(scale) {
+    return new Promise(function (resolve, reject) {
+      var exportCanvas = document.createElement("canvas");
+      var result;
+      try {
+        result = renderArtwork(exportCanvas, scale);
+      } catch (error) {
+        releaseExportCanvas(exportCanvas);
+        reject(
+          createExportError(
+            "CANVAS_ALLOCATION_FAILED",
+            error && error.message ? error.message : "Canvas allocation failed"
+          )
+        );
+        return;
+      }
+
+      function complete(blob) {
+        releaseExportCanvas(exportCanvas);
+        if (!blob) {
+          reject(
+            createExportError(
+              "PNG_ENCODING_FAILED",
+              "The browser returned an empty PNG"
+            )
+          );
+          return;
+        }
+        resolve({
+          blob: blob,
+          width: result.width * scale,
+          height: result.height * scale,
+          scale: scale
+        });
+      }
+
+      if (typeof exportCanvas.toBlob === "function") {
+        try {
+          exportCanvas.toBlob(complete, "image/png", 1);
+        } catch (error) {
+          releaseExportCanvas(exportCanvas);
+          reject(
+            createExportError(
+              "PNG_ENCODING_FAILED",
+              error && error.message ? error.message : "PNG encoding failed"
+            )
+          );
+        }
+        return;
+      }
+
+      try {
+        complete(dataUrlToBlob(exportCanvas.toDataURL("image/png")));
+      } catch (error) {
+        releaseExportCanvas(exportCanvas);
+        reject(error);
+      }
+    });
+  }
+
+  function renderPngWithFallback(startScale) {
+    function attempt(scale) {
+      return renderPngAtScale(scale).catch(function (error) {
+        if (scale <= 1) {
+          throw error;
+        }
+        console.warn(
+          "PNG export failed; retrying at a safer scale:",
+          error
+        );
+        setDownloadProgress("自动兼容重试…");
+        elements.renderStatus.textContent =
+          "当前浏览器内存不足，正在自动降低一档重试…";
+        return afterBrowserPaint().then(function () {
+          return attempt(scale - 1);
+        });
+      });
+    }
+
+    return attempt(startScale);
+  }
+
   function downloadArtwork() {
     if (elements.downloadButton.classList.contains("loading")) {
       return;
@@ -6081,40 +7271,42 @@
     elements.renderStatus.textContent = "正在准备高清作品…";
 
     var begin = function () {
-      try {
-        var exportCanvas = document.createElement("canvas");
-        var result = renderArtwork(exportCanvas, state.exportScale);
-        exportCanvas.toBlob(
-          function (blob) {
-            if (!blob) {
-              setDownloadLoading(false);
-              elements.renderStatus.textContent = "保存失败，请降低清晰度重试";
-              showToast("保存失败，请重试");
-              return;
-            }
-            try {
-              var filename =
-                safeFilename(state.line1 || state.line2) + "-字标.png";
-              var dimensions =
-                result.width * state.exportScale +
-                " × " +
-                result.height * state.exportScale;
-              deliverArtwork(blob, filename, dimensions);
-            } catch (error) {
-              console.warn("Unable to prepare artwork download.", error);
-              setDownloadLoading(false);
-              elements.renderStatus.textContent = "保存失败，请重试";
-              showToast("保存失败，请重试");
-            }
-          },
-          "image/png",
-          1
-        );
-      } catch (error) {
-        setDownloadLoading(false);
-        elements.renderStatus.textContent = "尺寸太大，请降低清晰度重试";
-        showToast("尺寸太大，请选择较低清晰度");
+      var dimensions = dimensionsFromValue(state.canvasSize);
+      var requestedScale = state.exportScale;
+      var startScale = compatibleImageExportScale(
+        dimensions,
+        requestedScale
+      );
+      if (startScale < requestedScale) {
+        setDownloadProgress("兼容模式生成中…");
+        elements.renderStatus.textContent =
+          "当前浏览器将使用 " + startScale + "× 安全尺寸保存…";
       }
+
+      renderPngWithFallback(startScale)
+        .then(function (result) {
+          var filename =
+            safeFilename(state.line1 || state.line2) + "-字标.png";
+          var dimensionLabel = result.width + " × " + result.height;
+          var downgraded = result.scale < requestedScale;
+          if (downgraded) {
+            dimensionLabel += " · 自动兼容 " + result.scale + "×";
+          }
+          deliverArtwork(result.blob, filename, dimensionLabel);
+          if (downgraded) {
+            showToast(
+              "当前浏览器已自动使用 " + result.scale + "× 完成保存"
+            );
+          }
+        })
+        .catch(function (error) {
+          console.warn("Unable to export PNG artwork.", error);
+          var code = (error && error.code) || "PNG_EXPORT_FAILED";
+          setDownloadLoading(false);
+          elements.renderStatus.textContent =
+            "保存失败，请切换系统浏览器 · " + code;
+          showToast("保存失败（" + code + "）");
+        });
     };
 
     waitForArtworkResources().then(begin, function (error) {
@@ -6551,10 +7743,19 @@
   });
 
   [
-    { input: elements.line1, layerId: "text-line-1" },
-    { input: elements.line2, layerId: "text-line-2" },
-    { input: elements.subtitle, layerId: "text-subtitle" }
+    { input: elements.line1, layerId: "text-line-1", textKey: "line1" },
+    { input: elements.line2, layerId: "text-line-2", textKey: "line2" },
+    {
+      input: elements.subtitle,
+      layerId: "text-subtitle",
+      textKey: "subtitle"
+    }
   ].forEach(function (item) {
+    item.input.addEventListener("input", function () {
+      state[item.textKey] = item.input.value;
+      pruneGlyphAdjustmentsForLine(item.layerId, item.input.value);
+      updateGlyphEditorInterface();
+    });
     item.input.addEventListener("focus", function () {
       var targetLayer = state.advancedLayerMode
         ? getLayer(item.layerId)
@@ -6566,6 +7767,35 @@
           syncEditorSection: false
         });
       }
+    });
+  });
+
+  elements.previousGlyphButton.addEventListener("click", function () {
+    moveActiveGlyphTarget(-1);
+  });
+  elements.nextGlyphButton.addEventListener("click", function () {
+    moveActiveGlyphTarget(1);
+  });
+  elements.glyphResetButton.addEventListener("click", function () {
+    resetCurrentGlyphAdjustment(true);
+  });
+  elements.glyphResetAllButton.addEventListener("click", function () {
+    resetAllGlyphAdjustments(true);
+  });
+  elements.glyphFineTuneCard.addEventListener("toggle", function () {
+    if (elements.glyphFineTuneCard.open) {
+      updateGlyphEditorInterface();
+    }
+  });
+
+  [
+    { control: elements.glyphScale, property: "scale" },
+    { control: elements.glyphOffsetX, property: "x" },
+    { control: elements.glyphOffsetY, property: "y" },
+    { control: elements.glyphRotation, property: "rotation" }
+  ].forEach(function (item) {
+    item.control.addEventListener("input", function () {
+      setCurrentGlyphAdjustment(item.property, item.control.value);
     });
   });
 
@@ -6676,6 +7906,8 @@
       elements.line1.value = example.line1;
       elements.line2.value = example.line2;
       elements.subtitle.value = example.subtitle;
+      state.glyphAdjustments = {};
+      activeGlyphTarget = null;
       state.seed = (state.seed + 97) >>> 0;
       scheduleRender();
       scheduleHistoryCapture();
@@ -6727,7 +7959,8 @@
   });
 
   elements.resetButton.addEventListener("click", function () {
-    state = Object.assign({}, defaults);
+    state = createState();
+    activeGlyphTarget = null;
     layers = createDefaultTextLayers();
     activeLayerId = "lettering-group";
     expandedLayerId = activeLayerId;
@@ -6743,6 +7976,10 @@
   elements.overlayFile.addEventListener("change", function () {
     anchorFixedViewport(false);
     var files = Array.from(elements.overlayFile.files || []).slice(0, 12);
+    if (!files.length) {
+      return;
+    }
+    setLocalUploadBusy(true);
     var queue = Promise.resolve();
     files.forEach(function (file, index) {
       queue = queue.then(function () {
@@ -6750,8 +7987,16 @@
       });
     });
     if ((elements.overlayFile.files || []).length > files.length) {
-      showToast("一次最多添加 12 张图片");
+      showToast("一次最多添加 12 个本地素材");
     }
+    queue.then(
+      function () {
+        setLocalUploadBusy(false);
+      },
+      function () {
+        setLocalUploadBusy(false);
+      }
+    );
     elements.overlayFile.blur();
     anchorFixedViewportAfterLayout(false);
   });
@@ -6862,6 +8107,7 @@
   elements.aboutButton.addEventListener("click", openAboutDialog);
   elements.aboutBackdrop.addEventListener("click", closeAboutDialog);
   elements.aboutCloseButton.addEventListener("click", closeAboutDialog);
+  elements.welcomeStartButton.addEventListener("click", closeWelcomeDialog);
   if (elements.mobileCacheRefreshButton) {
     elements.mobileCacheRefreshButton.addEventListener(
       "click",
@@ -6878,6 +8124,15 @@
   );
 
   document.addEventListener("keydown", function (event) {
+    if (isWelcomeDialogOpen()) {
+      if (event.key === "Escape") {
+        event.preventDefault();
+        closeWelcomeDialog();
+      } else if (event.key === "Tab") {
+        trapWelcomeDialogFocus(event);
+      }
+      return;
+    }
     var key = String(event.key).toLowerCase();
     if ((event.ctrlKey || event.metaKey) && key === "z") {
       event.preventDefault();
@@ -6956,6 +8211,14 @@
   });
 
   window.addEventListener("lettering-atlas-glyph-ready", scheduleRender);
+  window.addEventListener("lettering-atlas-glyph-failed", function () {
+    // The next render starts only the browser fallback font needed for the
+    // affected glyph. Re-render once that font finishes loading.
+    scheduleRender();
+    if (document.fonts && document.fonts.ready) {
+      Promise.resolve(document.fonts.ready).then(scheduleRender, function () {});
+    }
+  });
 
   if ("scrollRestoration" in window.history) {
     window.history.scrollRestoration = "manual";
@@ -6966,19 +8229,19 @@
   renderPreviewSafely();
   initializeHistory();
   restoreCachedOverlay();
+  updateBrowserCompatibilityTip();
+  openWelcomeDialog();
 
   if (styleEngine) {
     vectorEngineReady = Promise.resolve()
       .then(function () {
-        return styleEngine.init({
-          longcang: "./assets/fonts/LongCang-Regular.ttf",
-          qingke: "./assets/fonts/ZCOOLQingKeHuangYou-Regular.ttf",
-          kuaile: "./assets/fonts/ZCOOLKuaiLe-Regular.ttf",
-          kalam: "./assets/fonts/Kalam-Bold.ttf",
-          princess: "./assets/fonts/PrincessSofia-Regular.ttf"
-        }, "./assets/font-atlas/runtime-glyph-index.json?v=5", function (progress) {
-          setFontLoadingProgress(progress * 92);
-        });
+        return styleEngine.init(
+          {},
+          "./assets/font-atlas/runtime-glyph-index.json?v=5",
+          function (progress) {
+            setFontLoadingProgress(progress * 92);
+          }
+        );
       })
       .then(function () {
         scheduleRender();
@@ -6992,48 +8255,20 @@
     vectorEngineReady = Promise.resolve(null);
     showFontLoadingError(new Error("Lettering style engine is unavailable"));
   }
-  if (document.fonts && document.fonts.load) {
-    logoFontsReady = Promise.all([
-      document.fonts.load(
-        '400 120px "LogoDesignedCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 120px "LogoSkeletonCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 120px "LogoHandCN"',
-        "直到群友变成一只小猪自由生长"
-      ),
-      document.fonts.load(
-        '400 90px "LogoScriptEN"',
-        "Till We All Turn into Little Piggies"
-      ),
-      document.fonts.load(
-        '700 120px "LogoHandEN"',
-        "STAY CURIOUS KEEP CREATING"
-      )
-    ])
-      .then(function (loadedFonts) {
-        scheduleRender();
-        return loadedFonts;
-      })
-      .catch(function (error) {
-        console.warn("Canvas lettering fonts unavailable.", error);
-        showFontLoadingError(error);
-        return null;
-      });
-  } else if (document.fonts && document.fonts.ready) {
-    logoFontsReady = document.fonts.ready
+  if (document.fonts && document.fonts.ready) {
+    logoFontsReady = Promise.resolve(document.fonts.ready)
       .then(function () {
         scheduleRender();
       })
       .catch(function (error) {
-        console.warn("Canvas lettering fonts unavailable.", error);
-        showFontLoadingError(error);
+        console.warn("A browser fallback font did not finish loading.", error);
         return null;
       });
+    if (document.fonts.addEventListener) {
+      document.fonts.addEventListener("loadingdone", scheduleRender);
+    }
+  } else {
+    logoFontsReady = Promise.resolve(null);
   }
   finishInitialFontLoading();
 })();

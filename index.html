@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=26" />
+    <link rel="stylesheet" href="./styles.css?v=31" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -38,6 +38,85 @@
       >
         <span class="font-loading-bar" id="fontLoadingBar"></span>
       </div>
+    </div>
+
+    <div class="welcome-dialog" id="welcomeDialog" hidden>
+      <div class="welcome-dialog-backdrop" aria-hidden="true"></div>
+      <section
+        class="welcome-card"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="welcomeTitle"
+        aria-describedby="welcomeDisclaimer welcomeBrowserTip"
+      >
+        <span class="welcome-card-decor welcome-card-decor-star" aria-hidden="true">✦</span>
+        <span class="welcome-card-decor welcome-card-decor-flower" aria-hidden="true">✽</span>
+        <span class="welcome-card-decor welcome-card-decor-loop" aria-hidden="true"></span>
+
+        <div class="welcome-card-topline">
+          <span class="welcome-edition">
+            <img src="./assets/orange-icon.svg?v=1" alt="" />
+            <span><b>ORANGE SUMMER</b><small>橙色夏日创作站</small></span>
+          </span>
+          <strong class="welcome-free-badge"><span>FREE</span> 免费使用</strong>
+        </div>
+
+        <h1 id="welcomeTitle">
+          欢迎来制作你的
+          <span>橙色夏日记忆！</span>
+        </h1>
+        <p class="welcome-intro">把喜欢的文字、照片和贴纸，拼成一张属于你的夏日纪念卡。</p>
+
+        <div class="welcome-author-row">
+          <div class="welcome-author">
+            <span class="welcome-author-mark" aria-hidden="true">M</span>
+            <span><small>作者 / CREATED BY</small><strong>Minecrash</strong></span>
+          </div>
+          <nav class="welcome-socials" aria-label="作者主页与项目源码">
+            <a
+              href="https://www.bilibili.com/video/BV1MYM66HEZR/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="在哔哩哔哩查看 Minecrash 的页面（新窗口打开）"
+              title="哔哩哔哩"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="m8 3 4 3.5L16 3"></path>
+                <rect x="3" y="6.5" width="18" height="14" rx="4"></rect>
+                <path d="M8.5 11.5v3M15.5 11.5v3"></path>
+              </svg>
+              <span>哔哩哔哩</span>
+            </a>
+            <a
+              href="https://github.com/Minecrash98/zhe-pian-da-di-font-pack"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="在 GitHub 查看项目源码（新窗口打开）"
+              title="GitHub"
+            >
+              <svg viewBox="0 0 24 24" aria-hidden="true">
+                <path d="M12 2.7a9.5 9.5 0 0 0-3 18.5c.5.1.7-.2.7-.5v-1.8c-2.9.6-3.5-1.2-3.5-1.2-.5-1.2-1.2-1.5-1.2-1.5-1-.7.1-.7.1-.7 1.1.1 1.7 1.1 1.7 1.1 1 1.7 2.5 1.2 3.1.9.1-.7.4-1.2.7-1.5-2.3-.3-4.7-1.2-4.7-5.3 0-1.2.4-2.1 1.1-2.9-.1-.3-.5-1.4.1-2.8 0 0 .9-.3 3.1 1.1a10.5 10.5 0 0 1 5.6 0c2.1-1.4 3-1.1 3-1.1.6 1.4.2 2.5.1 2.8.7.8 1.1 1.7 1.1 2.9 0 4.1-2.4 5-4.7 5.3.4.3.7 1 .7 2v3c0 .3.2.6.7.5A9.5 9.5 0 0 0 12 2.7Z" fill="currentColor" stroke="none"></path>
+              </svg>
+              <span>GitHub</span>
+            </a>
+          </nav>
+        </div>
+
+        <p class="welcome-disclaimer" id="welcomeDisclaimer">
+          <strong>免责声明</strong>
+          本站是免费、非官方的同人创作工具，与《明日方舟》官方无隶属或合作关系；相关素材版权归《明日方舟》及其权利人所有，请勿用于商业用途。
+        </p>
+
+        <p class="welcome-browser-tip" id="welcomeBrowserTip">
+          <span aria-hidden="true">i</span>
+          如果遇到资源没有办法加载的情况，麻烦切换至手机自带的浏览器～
+        </p>
+
+        <button class="welcome-start-button" id="welcomeStartButton" type="button">
+          <span><strong>开始创作～</strong><small>LET'S MAKE A SUMMER MEMORY</small></span>
+          <b aria-hidden="true">→</b>
+        </button>
+      </section>
     </div>
 
     <div class="app-shell">
@@ -362,7 +441,7 @@
                   <span class="text-layer-toggle-index" aria-hidden="true">1</span>
                   <span><strong>第一行中文</strong><b>已启用</b></span>
                 </button>
-                <output id="line1Count">7</output>
+                <output id="line1Count">6</output>
               </div>
               <input id="line1" type="text" value="直到群友变成" autocomplete="off" aria-label="第一行中文" />
             </div>
@@ -395,6 +474,67 @@
                 aria-label="英文小字"
               />
             </div>
+
+            <details class="glyph-fine-tune-card" id="glyphFineTuneCard">
+              <summary>
+                <span class="glyph-fine-tune-summary-icon" aria-hidden="true">字</span>
+                <span>
+                  <strong>逐字高级微调</strong>
+                  <small>文字确定后，单独调整每一个字</small>
+                </span>
+                <span class="precision-chevron" aria-hidden="true">⌄</span>
+              </summary>
+              <div class="glyph-fine-tune-body">
+                <div class="glyph-fine-tune-empty" id="glyphFineTuneEmpty" hidden>
+                  请先输入并启用至少一个文字
+                </div>
+                <div id="glyphFineTuneEditor">
+                  <div class="glyph-target-row" aria-live="polite">
+                    <span class="glyph-target-character" id="glyphTargetCharacter" aria-hidden="true">直</span>
+                    <span class="glyph-target-copy">
+                      <strong id="glyphTargetLabel">第一行中文 · 第 1 / 7 字</strong>
+                      <small id="glyphTargetHint">当前微调“直”</small>
+                    </span>
+                    <button class="glyph-reset-button" id="glyphResetButton" type="button">复位当前字</button>
+                  </div>
+
+                  <div class="glyph-navigation" aria-label="切换需要微调的文字">
+                    <button id="previousGlyphButton" type="button">
+                      <span aria-hidden="true">←</span>上一个字
+                    </button>
+                    <output id="glyphTargetProgress">1 / 40</output>
+                    <button id="nextGlyphButton" type="button">
+                      下一个字<span aria-hidden="true">→</span>
+                    </button>
+                  </div>
+
+                  <div class="glyph-adjustment-controls">
+                    <label class="range-field compact-range">
+                      <span><span>当前字大小</span><output id="glyphScaleValue">100%</output></span>
+                      <input id="glyphScale" type="range" min="30" max="250" step="1" value="100" />
+                    </label>
+                    <div class="two-column glyph-position-grid">
+                      <label class="range-field compact-range">
+                        <span><span>左右位置</span><output id="glyphOffsetXValue">0%</output></span>
+                        <input id="glyphOffsetX" type="range" min="-150" max="150" step="1" value="0" />
+                      </label>
+                      <label class="range-field compact-range">
+                        <span><span>上下位置</span><output id="glyphOffsetYValue">0%</output></span>
+                        <input id="glyphOffsetY" type="range" min="-150" max="150" step="1" value="0" />
+                      </label>
+                    </div>
+                    <label class="range-field compact-range">
+                      <span><span>当前字旋转</span><output id="glyphRotationValue">0°</output></span>
+                      <input id="glyphRotation" type="range" min="-180" max="180" step="1" value="0" />
+                    </label>
+                  </div>
+
+                  <button class="glyph-reset-all-button" id="glyphResetAllButton" type="button" disabled>
+                    清除全部逐字微调
+                  </button>
+                </div>
+              </div>
+            </details>
 
             <div class="example-row" aria-label="示例文案">
               <span>换个灵感</span>
@@ -751,22 +891,27 @@
             </details>
 
             <div class="custom-upload-block" id="customUploadBlock">
-              <div class="asset-divider"><span>继续叠加本地图片</span></div>
+              <div class="asset-divider"><span>继续叠加本地图片 / GIF</span></div>
               <div class="overlay-upload-row">
                 <label class="upload-button" for="overlayFile">
                   <input
                     id="overlayFile"
                     type="file"
-                    accept="image/png,image/jpeg,image/webp"
+                    accept="image/png,image/jpeg,image/webp,image/gif,.gif"
                     multiple
                   />
                   <span aria-hidden="true">＋</span>
-                  选择图片（可多选）
+                  选择图片 / GIF（可多选）
                 </label>
                 <button id="removeOverlayButton" class="remove-layer-button legacy-layer-controls" type="button" disabled>
                   删除选中
                 </button>
               </div>
+              <p class="local-gif-experimental-note">
+                <strong>实验性 GIF</strong>
+                <span>可与文字、贴纸共存；单个不超过 15 MB、60 帧，较大画面会压缩，超限会提示。</span>
+              </p>
+              <p id="localUploadStatus" class="local-upload-status" role="status" aria-live="polite" hidden></p>
             </div>
 
             <div class="overlay-file-card legacy-layer-controls" id="overlayFileCard" aria-live="polite">
@@ -776,7 +921,7 @@
               </div>
               <span>
                 <strong id="overlayFileName">还没有添加图片</strong>
-                <small id="overlayFileMeta">PNG、JPG 或 WebP · 25 MB 以内</small>
+                <small id="overlayFileMeta">普通图片 25 MB 以内 · 实验性 GIF 15 MB 以内</small>
               </span>
             </div>
 
@@ -1057,11 +1202,11 @@
       <span id="toastText">作品已准备好</span>
     </div>
 
-    <script src="./assets/vendor/opentype.min.js"></script>
     <script src="./templates.js?v=3"></script>
-    <script src="./style-engine.js?v=6"></script>
+    <script src="./style-engine.js?v=7"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
-    <script src="./app.js?v=34"></script>
+    <script src="./assets/vendor/gifuct.min.js?v=1"></script>
+    <script src="./app.js?v=38"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"

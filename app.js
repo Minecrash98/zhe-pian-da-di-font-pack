@@ -66,6 +66,8 @@
   var state = createState();
   var renderFrame = 0;
   var toastTimer = 0;
+  var textLayoutCache = Object.create(null);
+  var textLayoutFingerprint = "";
   var logoFontsReady = null;
   var vectorEngineReady = null;
   var styleEngine = window.LetteringStyleEngine || null;
@@ -976,7 +978,7 @@
         setFontLoadingProgress(99);
         scheduleRender();
         requestAnimationFrame(finishFontLoading);
-        window.setTimeout(finishFontLoading, 250);
+        window.setTimeout(finishFontLoading, 2000);
       })
       .catch(function (error) {
         console.warn("Lettering resources did not finish loading.", error);
@@ -5601,7 +5603,14 @@
     var runtimeAtlasMode = Boolean(
       activeTemplate && activeTemplate.atlasEnabled
     );
-    var textLayouts = Object.create(null);
+    var layoutFingerprint = line1Text + "|" + line2Text + "|" + subtitleText +
+      "|" + state.canvasSize + "|" + state.fontStyle +
+      "|" + state.irregularity + "|" + state.seed;
+    var textLayouts;
+    if (layoutFingerprint === textLayoutFingerprint && textLayoutCache) {
+      textLayouts = textLayoutCache;
+    } else {
+      textLayouts = Object.create(null);
 
     if (line1Text) {
       var line1Seed = (state.seed + hashString(line1Text)) ^ 0x119abc;
@@ -5676,6 +5685,10 @@
         bounds: textLayoutBounds(subtitleLayout, "subtitle", width, height),
         seed: (state.seed + hashString(subtitleText)) ^ 0x51e1d5
       };
+    }
+
+    textLayoutCache = textLayouts;
+    textLayoutFingerprint = layoutFingerprint;
     }
 
     var groupLayer = getLayer("lettering-group");

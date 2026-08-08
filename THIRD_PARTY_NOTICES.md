@@ -10,8 +10,9 @@
 
 ## 风格字形图集
 
-- 文件：`assets/font-atlas/glyphs-v2/**`、`assets/font-atlas/runtime-glyph-index.json`
+- 文件：`assets/font-atlas/glyphs-v2/**`、`assets/font-atlas/runtime-glyph-index.json`、`assets/fonts/ZhePianDaDiFanmade-Regular.ttf`
 - 说明：这些文件用于还原活动视觉风格，属于项目内的二创视觉素材，不纳入项目 MIT License。使用者应自行确认其使用场景符合相关权利人的要求。
+- `ZhePianDaDiFanmade-Regular.ttf` 是从上述 PNG 字形图集自动描摹生成的实验性 TrueType 字体，不是官方发布或原生设计源文件。
 
 ## 《明日方舟》Angelina 官方素材
 

@@ -330,6 +330,9 @@
       "selectedLayerVisibilityButton"
     ),
     selectedLayerLockButton: document.getElementById("selectedLayerLockButton"),
+    selectedLayerMirrorButton: document.getElementById(
+      "selectedLayerMirrorButton"
+    ),
     selectedLayerResetButton: document.getElementById("selectedLayerResetButton"),
     selectedLayerDeleteButton: document.getElementById("selectedLayerDeleteButton"),
     decorationLayerControls: document.getElementById("decorationLayerControls"),
@@ -1500,6 +1503,8 @@
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="m7 10 5 5 5-5"></path></svg>',
       copy:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><rect x="8" y="8" width="11" height="11" rx="2"></rect><path d="M16 8V6a2 2 0 0 0-2-2H6a2 2 0 0 0-2 2v8a2 2 0 0 0 2 2h2"></path></svg>',
+      mirror:
+        '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3v18"></path><path d="m9 6-5 6 5 6Z"></path><path d="m15 6 5 6-5 6Z"></path></svg>',
       trash:
         '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 7h16"></path><path d="m9 7 .7-3h4.6l.7 3"></path><path d="m6.5 7 .8 13h9.4l.8-13"></path><path d="M10 11v5M14 11v5"></path></svg>',
       reset:
@@ -1521,6 +1526,7 @@
       elements.selectedLayerOpacity,
       elements.selectedLayerVisibilityButton,
       elements.selectedLayerLockButton,
+      elements.selectedLayerMirrorButton,
       elements.selectedLayerResetButton,
       elements.selectedLayerDeleteButton,
       elements.selectedStarCount,
@@ -1539,6 +1545,7 @@
     if (!layer) {
       elements.decorationLayerControls.hidden = true;
       elements.groupLayerControls.hidden = true;
+      elements.selectedLayerMirrorButton.hidden = true;
       elements.selectedLayerName.textContent = "未选择图层";
       elements.selectedLayerType.textContent = "请从图层列表选择";
       elements.selectedLayerPreview.textContent = "—";
@@ -1549,6 +1556,19 @@
     elements.selectedLayerType.textContent = layerTypeLabel(layer);
     elements.decorationLayerControls.hidden = !isDecorationLayer(layer);
     elements.groupLayerControls.hidden = !isLetteringGroupLayer(layer);
+    elements.selectedLayerMirrorButton.hidden = !isImageLayer(layer);
+    elements.selectedLayerMirrorButton.disabled =
+      !isImageLayer(layer) || Boolean(layer.locked);
+    elements.selectedLayerMirrorButton.classList.toggle(
+      "active",
+      isImageLayer(layer) && Boolean(layer.flipX)
+    );
+    elements.selectedLayerMirrorButton.setAttribute(
+      "aria-pressed",
+      String(isImageLayer(layer) && Boolean(layer.flipX))
+    );
+    elements.selectedLayerMirrorButton.querySelector("span").textContent =
+      layer.flipX ? "取消镜像" : "水平镜像";
     elements.selectedLayerPreview.replaceChildren();
     if (isArtworkLayer(layer)) {
       elements.selectedLayerPreview.textContent = layer.thumbnail || "T";
@@ -1556,6 +1576,7 @@
       var preview = document.createElement("img");
       preview.alt = "";
       preview.src = layer.thumbnailSrc || layer.objectUrl || "";
+      preview.style.transform = layer.flipX ? "scaleX(-1)" : "";
       elements.selectedLayerPreview.appendChild(preview);
     }
 
@@ -1816,6 +1837,24 @@
       ">" +
       layerIconMarkup("reset") +
       "<span>恢复默认位置</span></button>";
+    if (isImageLayer(layer)) {
+      wrapper
+        .querySelector('[data-layer-action="reset"]')
+        .insertAdjacentHTML(
+          "beforebegin",
+          '<button class="' +
+            (layer.flipX ? "active" : "") +
+            '" type="button" data-layer-action="mirror" aria-pressed="' +
+            String(Boolean(layer.flipX)) +
+            '"' +
+            (locked ? " disabled" : "") +
+            ">" +
+            layerIconMarkup("mirror") +
+            "<span>" +
+            (layer.flipX ? "取消水平镜像" : "水平镜像") +
+            "</span></button>"
+        );
+    }
     if (isDecorationLayer(layer)) {
       wrapper.insertAdjacentHTML(
         "afterbegin",
@@ -2447,6 +2486,7 @@
       layer.opacity = Number.isFinite(layer.defaultOpacity)
         ? layer.defaultOpacity
         : state.overlayOpacity;
+      layer.flipX = Boolean(layer.defaultFlipX);
       syncLayerControls(layer);
     }
   }
@@ -2491,6 +2531,21 @@
     updateCanvasSelection(lastPreviewResult);
     scheduleRender();
     scheduleHistoryCapture();
+  }
+
+  function setImageLayerMirrored(layer, mirrored, notifyUser) {
+    if (!isImageLayer(layer) || layer.locked) {
+      return;
+    }
+    layer.flipX = Boolean(mirrored);
+    syncSelectedLayerControls(layer);
+    renderLayerList();
+    updateCanvasSelection(lastPreviewResult);
+    scheduleRender();
+    scheduleHistoryCapture();
+    if (notifyUser) {
+      showToast(layer.flipX ? "素材已水平镜像" : "已取消素材镜像");
+    }
   }
 
   function setDecorationLayerProperty(layer, property, value, output) {
@@ -2801,11 +2856,13 @@
         y: kind === "character" || gifMode ? 54 : 50,
         rotation: 0,
         opacity: 100,
+        flipX: false,
         defaultScale: kind === "character" || gifMode ? 36 : 28,
         defaultX: kind === "character" || gifMode ? 78 : 50,
         defaultY: kind === "character" || gifMode ? 54 : 50,
         defaultRotation: 0,
         defaultOpacity: 100,
+        defaultFlipX: false,
         visible: true,
         locked: false
       };
@@ -3187,11 +3244,13 @@
           y: 50,
           rotation: 0,
           opacity: 100,
+          flipX: false,
           defaultScale: 100,
           defaultX: 50,
           defaultY: 50,
           defaultRotation: 0,
           defaultOpacity: 100,
+          defaultFlipX: false,
           visible: true,
           locked: false
         };
@@ -3284,11 +3343,13 @@
           y: 50,
           rotation: 0,
           opacity: 100,
+          flipX: false,
           defaultScale: 100,
           defaultX: 50,
           defaultY: 50,
           defaultRotation: 0,
           defaultOpacity: 100,
+          defaultFlipX: false,
           visible: true,
           locked: false
         };
@@ -3456,6 +3517,7 @@
     ctx.globalAlpha = clamp((layer.opacity == null ? 100 : layer.opacity) / 100, 0, 1);
     ctx.translate(centerX, centerY);
     ctx.rotate(((layer.rotation || 0) * Math.PI) / 180);
+    ctx.scale(layer.flipX ? -1 : 1, 1);
     ctx.drawImage(
       image,
       -drawWidth / 2,
@@ -3649,7 +3711,8 @@
           Math.round(layer.scale) +
           "% · " +
           Math.round(layer.rotation) +
-          "°"
+          "°" +
+          (layer.flipX ? " · 镜像" : "")
       };
     }
 
@@ -6067,6 +6130,7 @@
       scale: layer.scale,
       rotation: layer.rotation,
       opacity: Number.isFinite(layer.opacity) ? layer.opacity : 100,
+      flipX: Boolean(layer.flipX),
       visible: layer.visible,
       locked: layer.locked,
       lastIndex: layer.lastIndex,
@@ -6076,6 +6140,7 @@
       defaultScale: layer.defaultScale,
       defaultRotation: layer.defaultRotation,
       defaultOpacity: layer.defaultOpacity,
+      defaultFlipX: Boolean(layer.defaultFlipX),
       starCount: layer.starCount,
       showJDecorations: layer.showJDecorations,
       layoutSeed: layer.layoutSeed,
@@ -7824,6 +7889,12 @@
       setLayerLocked(layer, !layer.locked, true);
     }
   });
+  elements.selectedLayerMirrorButton.addEventListener("click", function () {
+    var layer = getActiveLayer();
+    if (isImageLayer(layer)) {
+      setImageLayerMirrored(layer, !layer.flipX, true);
+    }
+  });
   elements.selectedLayerResetButton.addEventListener("click", function () {
     var layer = getActiveLayer();
     resetLayerTransform(layer);
@@ -8012,6 +8083,16 @@
       }
       if (action === "delete") {
         removeLayer(layer.id, true);
+        event.stopPropagation();
+        return;
+      }
+      if (action === "mirror") {
+        selectLayer(layer.id, {
+          showSelection: true,
+          render: false,
+          syncEditorSection: false
+        });
+        setImageLayerMirrored(layer, !layer.flipX, true);
         event.stopPropagation();
         return;
       }

@@ -16,7 +16,7 @@
     <meta property="og:url" content="https://angelina-arknights.pages.dev/" />
     <title>直到大地变成一颗酸橙</title>
     <link rel="icon" type="image/svg+xml" href="./assets/orange-icon.svg?v=1" />
-    <link rel="stylesheet" href="./styles.css?v=32" />
+    <link rel="stylesheet" href="./styles.css?v=33" />
   </head>
   <body>
     <div class="font-loading-popover" id="fontLoadingPopover">
@@ -317,6 +317,19 @@
                   <path d="M8 10V7a4 4 0 0 1 8 0v3"></path>
                 </svg>
                 <span>锁定图层</span>
+              </button>
+              <button
+                id="selectedLayerMirrorButton"
+                type="button"
+                aria-pressed="false"
+                hidden
+              >
+                <svg viewBox="0 0 24 24" aria-hidden="true">
+                  <path d="M12 3v18"></path>
+                  <path d="m9 6-5 6 5 6Z"></path>
+                  <path d="m15 6 5 6-5 6Z"></path>
+                </svg>
+                <span>水平镜像</span>
               </button>
             </div>
 
@@ -1229,7 +1242,7 @@
     <script src="./style-engine.js?v=7"></script>
     <script src="./assets/angelina/manifest.js?v=1"></script>
     <script src="./assets/vendor/gifuct.min.js?v=1"></script>
-    <script src="./app.js?v=40"></script>
+    <script src="./app.js?v=41"></script>
     <!-- Cloudflare Web Analytics -->
     <script
       type="module"
